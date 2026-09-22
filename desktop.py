@@ -36,6 +36,14 @@ os.environ.setdefault("NEXTEVENTS_CACHE_DIR", str(DATA / "cache"))
 os.environ.setdefault("NEXTEVENTS_BROWSER_CHANNEL", "msedge")
 PORT = int(os.environ.get("PORT", "8095"))
 
+# Les réseaux d'entreprise interceptent TLS avec une CA interne :
+# on fait confiance au magasin Windows (comme Edge) plutôt qu'à certifi.
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except ImportError:
+    pass
+
 
 def _open_when_ready():
     """Ouvre le navigateur dès que le serveur répond."""
