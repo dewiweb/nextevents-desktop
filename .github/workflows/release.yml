@@ -19,6 +19,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          # upstream/ est privé : PAT avec accès en lecture à dewiweb/nextevents
+          token: ${{ secrets.UPSTREAM_PAT }}
 
       - uses: actions/setup-python@v5
         with:
