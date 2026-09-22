@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version de la release (ex: v1.0.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements-desktop.txt
+
+      - name: Build with PyInstaller
+        run: pyinstaller app.spec --noconfirm
+
+      - name: Package zip
+        working-directory: dist
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($env:GITHUB_REF_TYPE -ne "tag") { $tag = "${{ inputs.tag }}" }
+          Compress-Archive -Path nextevents -DestinationPath "nextevents-windows-$tag.zip"
+          echo "ZIP_NAME=nextevents-windows-$tag.zip" >> $env:GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextevents-windows
+          path: dist/${{ env.ZIP_NAME }}
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+          files: dist/${{ env.ZIP_NAME }}
+          generate_release_notes: true
