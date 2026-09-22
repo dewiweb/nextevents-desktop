@@ -1,3 +1,8 @@
 -r upstream/requirements.txt
 pyinstaller>=6.0
 truststore>=0.8
+# proxy d'entreprise : PAC/WPAD (pypac) + auth Negotiate/NTLM du poste
+pypac>=0.18.3
+requests-negotiate-sspi>=0.5.2; sys_platform == "win32"
+# dukpy 0.5.1+ n'a pas de wheel cp312 win_amd64 (build C requis) — on pin
+dukpy==0.5.0; sys_platform == "win32"

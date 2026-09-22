@@ -1,5 +1,6 @@
 build/
 dist/
 data/
+ms-playwright/
 __pycache__/
 *.pyc

@@ -10,11 +10,11 @@ Le code métier vit dans le dépôt principal, inclus ici en **submodule
 
 ## Principe
 
-- `desktop.py` lance le serveur Flask sur `127.0.0.1:8095` et ouvre le
-  navigateur par défaut
-- Le rendu HTML→PNG pilote **Microsoft Edge** (présent sur tout
-  Windows 10/11) via le canal `msedge` de Playwright — **aucun
-  téléchargement de navigateur**
+- `desktop.py` lance le serveur Flask sur `127.0.0.1:8095` et ouvre la
+  webui dans une fenêtre dédiée `--no-proxy-server`
+- Rendu HTML→PNG et fenêtre webui via le **Chromium embarqué** dans le
+  bundle — hors GPO/proxy du navigateur géré par l'entreprise (repli :
+  Edge du poste en canal `msedge`, puis navigateur par défaut)
 - Données dans `./data/` à côté de l'exe (diapos, réglages, cache
   fontes/images) — le dossier est copiable/déplaçable tel quel
 
@@ -51,7 +51,18 @@ build.bat
 - Variables d'environnement posées par `desktop.py` :
   `OUT_DIR`/`SETTINGS_FILE` → `./data`, `NEXTEVENTS_ASSET_DIR` → assets
   du bundle, `NEXTEVENTS_FONT_DIR`/`NEXTEVENTS_CACHE_DIR` → `./data`,
-  `NEXTEVENTS_BROWSER_CHANNEL=msedge`
-- Proxy d'entreprise : honorer `HTTP_PROXY`/`HTTPS_PROXY` si besoin
+  `PLAYWRIGHT_BROWSERS_PATH` → `ms-playwright` du bundle (sinon
+  `NEXTEVENTS_BROWSER_CHANNEL=msedge`)
+- Réseau d'entreprise : TLS intercepté → magasin de certs Windows
+  (`truststore`) ; proxy PAC/WPAD résolu via `pypac` (+ auth
+  Negotiate/NTLM du compte via `requests_negotiate_sspi`) ; forçage
+  manuel possible via `NEXTEVENTS_PROXY=http://proxy:3128`. La webui
+  s'ouvre dans une fenêtre Edge dédiée `--no-proxy-server` (le PAC peut
+  envoyer 127.0.0.1 au proxy) — profil `data/edge-ui`
+- `nextevents.exe --diag` écrit `data/diag.log` — diagnostic complet
+  poste pro : port libre, proxy (env, registre IE, PAC résolu par URL
+  dont 127.0.0.1), stratégies navigateur GPO, AppLocker, TCP direct vs
+  proxy, GET réels + scrape p1, lancement Edge/Playwright, et test
+  décisif de joignabilité 127.0.0.1 avec/sans `--no-proxy-server`
 - Antivirus : PyInstaller onedir est parfois flaggé à tort —
   prévoir une exception si nécessaire

@@ -10,6 +10,11 @@ if errorlevel 1 goto err
 python -m pip install -r requirements-desktop.txt
 if errorlevel 1 goto err
 
+rem Chromium embarque (hors GPO/proxy du navigateur gere) ~170 Mo
+set PLAYWRIGHT_BROWSERS_PATH=ms-playwright
+python -m playwright install chromium
+if errorlevel 1 goto err
+
 pyinstaller --clean --noconfirm app.spec
 if errorlevel 1 goto err
 

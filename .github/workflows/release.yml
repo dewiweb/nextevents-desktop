@@ -8,6 +8,10 @@ on:
       tag:
         description: "Version de la release (ex: v1.0.0)"
         required: true
+      draft:
+        description: "Créer une draft release (validation avant publication)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -28,6 +32,11 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements-desktop.txt
+
+      - name: Install bundled Chromium
+        run: playwright install chromium
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ms-playwright
 
       - name: Build with PyInstaller
         run: pyinstaller app.spec --noconfirm
@@ -51,4 +60,5 @@ jobs:
         with:
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
           files: dist/${{ env.ZIP_NAME }}
+          draft: ${{ inputs.draft || false }}
           generate_release_notes: true
