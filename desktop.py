@@ -60,6 +60,68 @@ def _open_when_ready():
     webbrowser.open(f"http://127.0.0.1:{PORT}/")
 
 
+def _diag():
+    """Diagnostique le lancement d'Edge — écrit data/diag.log."""
+    import subprocess
+    import traceback
+
+    log = DATA / "diag.log"
+
+    def w(msg):
+        print(msg)
+        with open(log, "a", encoding="utf-8") as f:
+            f.write(str(msg) + "\n")
+
+    log.unlink(missing_ok=True)
+    w(f"python {sys.version}  frozen={getattr(sys, 'frozen', False)}")
+    for exe in [
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+    ]:
+        p = Path(exe)
+        w(f"{exe}: exists={p.exists()}")
+        if p.exists():
+            try:
+                v = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=15)
+                w(f"  --version -> {v.stdout.strip()} {v.stderr.strip()}")
+            except Exception as e:
+                w(f"  --version failed: {e}")
+            try:
+                d = subprocess.run([exe, "--headless", "--dump-dom", "about:blank"],
+                                   capture_output=True, text=True, timeout=30)
+                w(f"  headless dump-dom -> rc={d.returncode} len={len(d.stdout)} err={d.stderr.strip()[:300]}")
+            except Exception as e:
+                w(f"  headless dump-dom failed: {e}")
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError as e:
+        w(f"playwright import: {e}")
+        return
+
+    for label, kw in [
+        ("msedge headless", dict(channel="msedge")),
+        ("msedge headless +disable-gpu", dict(channel="msedge", args=["--disable-gpu"])),
+        ("msedge headed", dict(channel="msedge", headless=False)),
+        ("chromium headless", dict()),
+    ]:
+        try:
+            with sync_playwright() as p:
+                b = p.chromium.launch(**kw)
+                pg = b.new_page()
+                pg.set_content("<h1>diag</h1>")
+                pg.screenshot(path=str(DATA / "diag.png"))
+                b.close()
+            w(f"launch {label}: OK")
+            break
+        except Exception:
+            tb = traceback.format_exc()
+            print(tb.splitlines()[-1])
+            with open(log, "a", encoding="utf-8") as f:
+                f.write(f"launch {label}: FAILED\n{tb}\n")
+    w(f"diag écrit dans {log}")
+
+
 def main():
     from nextevents.runner import scheduler
     from nextevents.settings import load_settings
@@ -73,4 +135,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if "--diag" in sys.argv:
+        _diag()
+    else:
+        main()
