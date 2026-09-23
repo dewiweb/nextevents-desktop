@@ -52,6 +52,35 @@ build.bat
   `OUT_DIR`/`SETTINGS_FILE` → `./data`, `NEXTEVENTS_ASSET_DIR` → assets
   du bundle, `NEXTEVENTS_FONT_DIR`/`NEXTEVENTS_CACHE_DIR` → `./data`,
   `NEXTEVENTS_BROWSER_CHANNEL=msedge`
-- Proxy d'entreprise : honorer `HTTP_PROXY`/`HTTPS_PROXY` si besoin
-- Antivirus : PyInstaller onedir est parfois flaggé à tort —
-  prévoir une exception si nécessaire
+- Proxy d'entreprise : honorer `HTTP_PROXY`/`HTTPS_PROXY` si besoin ;
+  `truststore` fait déjà confiance au magasin de certificats Windows
+  (interception TLS des pare-feux d'entreprise)
+
+## Antivirus / réputation (Symantec, SmartScreen…)
+
+Les exes PyInstaller **non signés** déclenchent fréquemment des alertes
+de réputation (Symantec WS.Reputation/SONAR, SmartScreen) : faux
+positif classique pour un binaire neuf et peu téléchargé. Ce n'est pas
+un signal de compromission — le build est reproductible depuis le tag
+GitHub via la CI publique, et le SHA256 du zip est vérifiable.
+
+Mitigations mises en place :
+
+- Métadonnées de version embarquées (`version.txt` : éditeur, produit,
+  description) — un exe identifié est moins suspect qu'un exe anonyme
+- Icône applicative (`nextevents.ico`)
+- Build onedir (pas de self-extract dans `%TEMP%`, moins suspect)
+
+Recommandations de déploiement, par ordre d'efficacité :
+
+1. **Whitelisting par le SI** — procédure normale pour un outil
+   interne ; l'alerte ne bloque généralement que le premier lancement.
+   Fournir le SHA256 du zip + le lien vers le tag/build GitHub comme
+   garantie de provenance.
+2. **Signalement de faux positif** — formulaire « report false
+   positive » de l'éditeur AV (ex. Broadcom/Symantec) ; gratuit,
+   efficace en quelques jours.
+3. **Signature de code** — fix durable : certificat OV (~200-400 €/an)
+   ou Azure Trusted Signing (~10 €/mois). La réputation se construit
+   alors release après release au lieu de repartir de zéro à chaque
+   binaire.
