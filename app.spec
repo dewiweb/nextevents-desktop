@@ -35,7 +35,8 @@ exe = EXE(
     exclude_binaries=True,
     name="nextevents",
     console=True,  # console = journal de l'app
-    icon=None,
+    icon="nextevents.ico",
+    version="version.txt",
 )
 coll = COLLECT(
     exe,
