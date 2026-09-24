@@ -140,24 +140,42 @@ def _diag():
 
 
 def _pick_dir(icon):
-    """Explorateur Windows → dossier de destination (local/mappé/UNC)."""
-    import tkinter as tk
-    from tkinter import filedialog
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
+    """Explorateur Windows → dossier de destination (local/mappé/UNC).
+
+    Dialogue natif SHBrowseForFolder : il a sa propre boucle de messages,
+    contrairement à tkinter qui gèle dans le thread du tray."""
+    d = None
     try:
-        cur = ""
+        import pythoncom
+        from win32com.shell import shell, shellcon
+        pythoncom.CoInitialize()
         try:
-            cur = _api("/api/status")["settings"].get("local_dir") or ""
+            # 0x40 = BIF_NEWDIALOGSTYLE (absent de shellcon) ;
+            # BIF_EDITBOX permet de coller un chemin UNC directement
+            pidl, _, _ = shell.SHBrowseForFolder(
+                0, None, "Dossier de destination des diapos",
+                shellcon.BIF_RETURNONLYFSDIRS | shellcon.BIF_EDITBOX | 0x40)
+            if pidl:
+                d = shell.SHGetPathFromIDList(pidl)
+        finally:
+            pythoncom.CoUninitialize()
+    except Exception:
+        pass
+    if not d:
+        # repli : FolderBrowserDialog dans un PowerShell dédié
+        import subprocess
+        try:
+            r = subprocess.run(
+                ["powershell", "-NoProfile", "-STA", "-Command",
+                 "Add-Type -AssemblyName System.Windows.Forms;"
+                 "$d=New-Object System.Windows.Forms.FolderBrowserDialog;"
+                 "$d.Description='Dossier de destination des diapos';"
+                 "$d.ShowNewFolderButton=$true;"
+                 "if($d.ShowDialog() -eq 'OK'){Write-Output $d.SelectedPath}"],
+                capture_output=True, text=True, timeout=120)
+            d = r.stdout.strip() or None
         except Exception:
             pass
-        d = filedialog.askdirectory(
-            title="Dossier de destination des diapos",
-            initialdir=cur or None,
-            parent=root)
-    finally:
-        root.destroy()
     if d:
         _api("/api/settings", {"local_dir": d})
         icon.notify(f"Destination : {d}", "Nextevents")

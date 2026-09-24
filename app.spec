@@ -6,8 +6,8 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = [("upstream/assets", "assets"), ("nextevents.ico", ".")]
 binaries = []
-# backend win32 de pystray est importé dynamiquement
-hiddenimports = ["pystray._win32"]
+# backend win32 de pystray et dialogue natif sont importés dynamiquement
+hiddenimports = ["pystray._win32", "win32com.shell"]
 
 # Playwright embarque son driver (node) — nécessaire même en canal
 # "msedge" (le navigateur est celui du système, pas de téléchargement)
