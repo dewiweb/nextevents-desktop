@@ -378,9 +378,18 @@ class MainWindow(QMainWindow):
         dl.setProperty("ghost", True)
         dl.clicked.connect(self._download_zip)
         row.addWidget(dl)
+        rm = QPushButton("Supprimer")
+        rm.setProperty("ghost", True)
+        rm.setToolTip("Supprimer la sélection (Suppr)")
+        rm.clicked.connect(self._delete_selected)
+        row.addWidget(rm)
         row.addStretch(1)
         v.addLayout(row)
         self.gallery = QListWidget()
+        self.gallery.setSelectionMode(QListWidget.ExtendedSelection)
+        self.gallery.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.gallery.customContextMenuRequested.connect(
+            self._gallery_menu)
         self.gallery.setViewMode(QListWidget.IconMode)
         self.gallery.setResizeMode(QListWidget.Adjust)
         self.gallery.setIconSize(QPixmap(1, 1).scaled(280, 160).size())
@@ -393,6 +402,9 @@ class MainWindow(QMainWindow):
         self.gallery.setTextElideMode(Qt.ElideMiddle)
         self.gallery.setSpacing(8)
         self.gallery.itemDoubleClicked.connect(self._preview_slide)
+        QShortcut(QKeySequence.Delete, self.gallery,
+                  context=Qt.WidgetWithChildrenShortcut,
+                  activated=self._delete_selected)
         v.addWidget(self.gallery)
         lay.addWidget(gal, 1)
         return w
@@ -744,10 +756,13 @@ class MainWindow(QMainWindow):
                 img = r.read()
                 if img.isNull():
                     continue
-                items.append((
-                    str(p.relative_to(d)),
-                    p.name.removeprefix("slide-").removesuffix(".png"),
-                    img, str(p)))
+                rel = str(p.relative_to(d))
+                label = p.name.removeprefix("slide-").removesuffix(".png")
+                # la variante portrait porte le même nom que la paysage
+                # → suffixe pour distinguer les jumelles dans la grille
+                if p.parent.name == "portrait":
+                    label += "  ▯"
+                items.append((rel, label, img, str(p)))
             self.thumbs_ready.emit(gen, items)
 
         threading.Thread(target=work, daemon=True).start()
@@ -762,6 +777,70 @@ class MainWindow(QMainWindow):
             it.setData(Qt.UserRole, rel)
             it.setToolTip(path)
             self.gallery.addItem(it)
+
+    def _gallery_menu(self, pos):
+        """Menu contextuel de la galerie : aperçu / suppression."""
+        from PySide6.QtWidgets import QMenu
+        it = self.gallery.itemAt(pos)
+        m = QMenu(self)
+        if it and it.data(Qt.UserRole):
+            m.addAction("Aperçu").triggered.connect(
+                lambda: self._preview_slide(it))
+        if self.gallery.selectedItems():
+            m.addAction("Supprimer la sélection…").triggered.connect(
+                self._delete_selected)
+        if m.actions():
+            m.exec(self.gallery.viewport().mapToGlobal(pos))
+
+    def _delete_selected(self):
+        """Supprime les diapos sélectionnées : PNG paysage + portrait +
+        HTML source (toutes les variantes), puis met manifest.txt à jour
+        pour que la prochaine synchro propage la suppression."""
+        items = [it for it in self.gallery.selectedItems()
+                 if it.data(Qt.UserRole)]
+        if not items:
+            return
+        if state["running"]:
+            self.statusBar().showMessage(
+                "Génération en cours — suppression impossible", 4000)
+            return
+        from PySide6.QtWidgets import QMessageBox
+        n_diapos = len({Path(it.data(Qt.UserRole)).name
+                        for it in items})
+        r = QMessageBox.question(
+            self, "Supprimer",
+            f"Supprimer {n_diapos} diapo(s) ?\n\n"
+            "Toutes les variantes sont supprimées (paysage, portrait, "
+            "HTML). La synchro les retirera aussi des destinations.\n"
+            "Attention : une diapo sera régénérée à la prochaine "
+            "génération si son événement est toujours publié.",
+            QMessageBox.Yes | QMessageBox.No)
+        if r != QMessageBox.Yes:
+            return
+        d = resolve_out_dir()
+        for it in items:
+            base = Path(it.data(Qt.UserRole)).name
+            stem = Path(base).stem
+            for p in {d / base, d / "portrait" / base,
+                      d / "html" / f"{stem}.html",
+                      d / "portrait" / "html" / f"{stem}.html"}:
+                try:
+                    p.unlink(missing_ok=True)
+                except OSError:
+                    pass
+        # manifeste : refléter la suppression dès maintenant (les
+        # synchros suppriment à distance ce qui est absent en local)
+        for sub in ("", "portrait"):
+            dd = d / sub if sub else d
+            mf = dd / "manifest.txt"
+            if mf.exists():
+                mf.write_text(
+                    "".join(f"{p.name}\n"
+                            for p in sorted(dd.glob("*.png"))),
+                    encoding="utf-8")
+        self.statusBar().showMessage(
+            f"{n_diapos} diapo(s) supprimée(s)", 4000)
+        self._refresh_gallery()
 
     def confirm_quit(self):
         """True si on peut quitter — propose d'enregistrer si des
