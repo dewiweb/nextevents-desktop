@@ -29,6 +29,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-desktop.txt
 
+      - name: Install Chromium headless shell (bundled)
+        # BROWSERS_PATH=0 : installe dans playwright/driver/package/
+        # .local-browsers -> collecté dans le bundle PyInstaller
+        run: |
+          $env:PLAYWRIGHT_BROWSERS_PATH = "0"
+          playwright install chromium --only-shell
+
       - name: Build with PyInstaller
         run: pyinstaller app.spec --noconfirm
 

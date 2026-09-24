@@ -43,7 +43,9 @@ os.environ.setdefault("SETTINGS_FILE", str(DATA / "settings.json"))
 os.environ.setdefault("NEXTEVENTS_ASSET_DIR", str(ASSETS))
 os.environ.setdefault("NEXTEVENTS_FONT_DIR", str(DATA / "fonts"))
 os.environ.setdefault("NEXTEVENTS_CACHE_DIR", str(DATA / "cache"))
-os.environ.setdefault("NEXTEVENTS_BROWSER_CHANNEL", "msedge")
+# Chromium headless embarqué dans le bundle (driver-appairé, immunisé
+# aux maj Edge). Pour forcer l'Edge système : NEXTEVENTS_BROWSER_CHANNEL=msedge
+# os.environ.setdefault("NEXTEVENTS_BROWSER_CHANNEL", "msedge")
 PORT = int(os.environ.get("PORT", "8095"))
 OUT_DIR = Path(os.environ["OUT_DIR"])
 
@@ -116,11 +118,10 @@ def _diag():
         return
 
     for label, kw in [
+        ("chromium headless (embarqué)", dict()),
         ("msedge headless", dict(channel="msedge")),
         ("msedge headless +disable-gpu",
          dict(channel="msedge", args=["--disable-gpu"])),
-        ("msedge headed", dict(channel="msedge", headless=False)),
-        ("chromium headless", dict()),
     ]:
         try:
             with sync_playwright() as p:

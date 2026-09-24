@@ -13,9 +13,11 @@ Le code métier vit dans le dépôt principal, inclus ici en **submodule
 - `nextevents.exe` tourne en **zone de notification** (tray) : le
   serveur webui est en arrière-plan sur `127.0.0.1:8095`, pas de
   console
-- Le rendu HTML→PNG pilote **Microsoft Edge** (présent sur tout
-  Windows 10/11) via le canal `msedge` de Playwright — **aucun
-  téléchargement de navigateur**
+- Le rendu HTML→PNG utilise un **Chromium headless embarqué** dans le
+  bundle (headless shell, appairé au driver Playwright) — immunisé aux
+  mises à jour d'Edge/Chrome sur les postes, zéro dépendance
+  navigateur. (Pour forcer l'Edge système à la place :
+  `NEXTEVENTS_BROWSER_CHANNEL=msedge` en variable d'environnement.)
 - Données dans `./data/` à côté de l'exe (diapos, réglages, cache
   fontes/images, `app.log`) — le dossier est copiable/déplaçable
   tel quel

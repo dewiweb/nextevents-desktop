@@ -10,6 +10,12 @@ if errorlevel 1 goto err
 python -m pip install -r requirements-desktop.txt
 if errorlevel 1 goto err
 
+rem headless shell seul suffit (rendu de diapos) ; BROWSERS_PATH=0 =
+rem installation hermetique dans le package -> collecte par PyInstaller
+set PLAYWRIGHT_BROWSERS_PATH=0
+python -m playwright install chromium --only-shell
+if errorlevel 1 goto err
+
 pyinstaller --clean --noconfirm app.spec
 if errorlevel 1 goto err
 
