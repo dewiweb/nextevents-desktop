@@ -165,8 +165,9 @@ def _pick_dir(icon):
     except Exception:
         pass
     if d:
-        _api("/api/settings", {"local_dir": d})
-        icon.notify(f"Destination : {d}", "Nextevents")
+        # les diapos sont générées directement dedans — une seule copie
+        _api("/api/settings", {"out_dir": d})
+        icon.notify(f"Dossier de sortie : {d}", "Nextevents")
 
 
 def _run_server():
@@ -219,7 +220,9 @@ def _tray():
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
                 "Ouvrir les diapos",
-                lambda i, it: os.startfile(OUT_DIR)),
+                lambda i, it: os.startfile(
+                    _api("/api/status")["settings"].get("out_dir")
+                    or OUT_DIR)),
             pystray.MenuItem(
                 "Réglages avancés",
                 lambda i, it: webbrowser.open(f"http://127.0.0.1:{PORT}/")),
