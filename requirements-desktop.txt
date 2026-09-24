@@ -1,3 +1,5 @@
 -r upstream/requirements.txt
 pyinstaller>=6.0
 truststore>=0.8
+pystray>=0.19
+pywin32>=306

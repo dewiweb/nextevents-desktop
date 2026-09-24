@@ -10,13 +10,35 @@ Le code métier vit dans le dépôt principal, inclus ici en **submodule
 
 ## Principe
 
-- `desktop.py` lance le serveur Flask sur `127.0.0.1:8095` et ouvre le
-  navigateur par défaut
+- `nextevents.exe` tourne en **zone de notification** (tray) : le
+  serveur webui est en arrière-plan sur `127.0.0.1:8095`, pas de
+  console
 - Le rendu HTML→PNG pilote **Microsoft Edge** (présent sur tout
   Windows 10/11) via le canal `msedge` de Playwright — **aucun
   téléchargement de navigateur**
 - Données dans `./data/` à côté de l'exe (diapos, réglages, cache
-  fontes/images) — le dossier est copiable/déplaçable tel quel
+  fontes/images, `app.log`) — le dossier est copiable/déplaçable
+  tel quel
+
+## Usage (utilisateur final)
+
+Clic droit sur l'icône « Nextevents » dans la zone de notification :
+
+- **Générer maintenant** — lance la récupération + génération
+  (notification Windows à la fin)
+- **Dossier de destination…** — explorateur de fichiers ; le dossier
+  choisi reçoit une **copie miroir** des diapos à chaque génération.
+  Un lecteur réseau mappé (`X:\…`) ou un chemin UNC
+  (`\\serveur\partage`) fonctionnent — l'authentification est celle de
+  la session Windows, aucun identifiant à configurer
+- **Ouvrir les diapos** — dossier de sortie local
+- **Réglages avancés** — ouvre la webui complète (intervalle auto,
+  formats paysage/portrait, destinations FTP/SMB, diapo du jour, journal)
+- **Quitter**
+
+L'infobulle de l'icône affiche le nombre de diapos et la date de
+dernière génération. Journal applicatif : `data\app.log`.
+Diagnostic Edge : `nextevents.exe --diag` → `data\diag.log`.
 
 ## Build (sur une machine Windows + Python ≥ 3.11)
 

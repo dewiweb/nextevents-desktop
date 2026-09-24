@@ -1,18 +1,26 @@
 #!/usr/bin/env python3
 """Lanceur desktop nextevents (Windows portable).
 
-Démarre le serveur webui en local (127.0.0.1) et ouvre le navigateur.
-Les données vivent dans ./data à côté de l'exécutable ; le rendu passe
-par l'Edge installé (canal Playwright "msedge") — aucun téléchargement
-de navigateur requis.
+App en zone de notification : le serveur webui tourne en arrière-plan
+sur 127.0.0.1:8095, le rendu passe par l'Edge installé (canal Playwright
+"msedge" — aucun téléchargement de navigateur).
 
-L'app est auto-contenue : OUT_DIR/SETTINGS_FILE et les caches sont
-redirigés via variables d'environnement *avant* l'import de nextevents.
+L'utilisateur pilote tout depuis l'icône : générer, choisir le dossier
+de destination (disque local, lecteur réseau mappé ou UNC — Windows
+gère l'auth SMB), ouvrir les diapos. La webui reste accessible via
+« Réglages avancés » pour la configuration experte (FTP/SMB, diapo du
+jour, formats…).
+
+Données dans ./data à côté de l'exe ; journal dans ./data/app.log.
+--diag : diagnostique le lancement d'Edge (data/diag.log).
 """
 
+import json
 import os
 import sys
 import threading
+import time
+import urllib.request
 import webbrowser
 from pathlib import Path
 
@@ -20,9 +28,11 @@ if getattr(sys, "frozen", False):
     # bundle PyInstaller : exe à la racine, code dans _internal/
     BASE = Path(sys.executable).resolve().parent
     ASSETS = Path(sys._MEIPASS) / "assets"
+    ICON = Path(sys._MEIPASS) / "nextevents.ico"
 else:
     BASE = Path(__file__).resolve().parent
     ASSETS = BASE / "upstream" / "assets"
+    ICON = BASE / "nextevents.ico"
     sys.path.insert(0, str(BASE / "upstream"))
 
 DATA = BASE / "data"
@@ -35,6 +45,7 @@ os.environ.setdefault("NEXTEVENTS_FONT_DIR", str(DATA / "fonts"))
 os.environ.setdefault("NEXTEVENTS_CACHE_DIR", str(DATA / "cache"))
 os.environ.setdefault("NEXTEVENTS_BROWSER_CHANNEL", "msedge")
 PORT = int(os.environ.get("PORT", "8095"))
+OUT_DIR = Path(os.environ["OUT_DIR"])
 
 # Les réseaux d'entreprise interceptent TLS avec une CA interne :
 # on fait confiance au magasin Windows (comme Edge) plutôt qu'à certifi.
@@ -44,20 +55,22 @@ try:
 except ImportError:
     pass
 
+if getattr(sys, "frozen", False):
+    # Mode fenêtré : pas de console — journal dans data/app.log (UTF-8,
+    # évite aussi les crashs d'encodage cp1252 sur les symboles du journal)
+    _log = open(DATA / "app.log", "a", encoding="utf-8", buffering=1)
+    sys.stdout = sys.stderr = _log
 
-def _open_when_ready():
-    """Ouvre le navigateur dès que le serveur répond."""
-    import time
-    import urllib.request
-    for _ in range(100):
-        try:
-            urllib.request.urlopen(f"http://127.0.0.1:{PORT}/", timeout=1)
-            break
-        except Exception:
-            time.sleep(0.3)
-    else:
-        return
-    webbrowser.open(f"http://127.0.0.1:{PORT}/")
+
+def _api(path, body=None):
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{PORT}{path}",
+        data=json.dumps(body).encode() if body is not None else None,
+        headers={"Content-Type": "application/json"},
+        method="POST" if body is not None else "GET",
+    )
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return json.load(r)
 
 
 def _diag():
@@ -82,14 +95,17 @@ def _diag():
         w(f"{exe}: exists={p.exists()}")
         if p.exists():
             try:
-                v = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=15)
+                v = subprocess.run([exe, "--version"], capture_output=True,
+                                   text=True, timeout=15)
                 w(f"  --version -> {v.stdout.strip()} {v.stderr.strip()}")
             except Exception as e:
                 w(f"  --version failed: {e}")
             try:
-                d = subprocess.run([exe, "--headless", "--dump-dom", "about:blank"],
-                                   capture_output=True, text=True, timeout=30)
-                w(f"  headless dump-dom -> rc={d.returncode} len={len(d.stdout)} err={d.stderr.strip()[:300]}")
+                d = subprocess.run(
+                    [exe, "--headless", "--dump-dom", "about:blank"],
+                    capture_output=True, text=True, timeout=30)
+                w(f"  headless dump-dom -> rc={d.returncode} "
+                  f"len={len(d.stdout)} err={d.stderr.strip()[:300]}")
             except Exception as e:
                 w(f"  headless dump-dom failed: {e}")
 
@@ -101,7 +117,8 @@ def _diag():
 
     for label, kw in [
         ("msedge headless", dict(channel="msedge")),
-        ("msedge headless +disable-gpu", dict(channel="msedge", args=["--disable-gpu"])),
+        ("msedge headless +disable-gpu",
+         dict(channel="msedge", args=["--disable-gpu"])),
         ("msedge headed", dict(channel="msedge", headless=False)),
         ("chromium headless", dict()),
     ]:
@@ -122,16 +139,115 @@ def _diag():
     w(f"diag écrit dans {log}")
 
 
-def main():
+def _pick_dir(icon):
+    """Explorateur Windows → dossier de destination (local/mappé/UNC)."""
+    import tkinter as tk
+    from tkinter import filedialog
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    try:
+        cur = ""
+        try:
+            cur = _api("/api/status")["settings"].get("local_dir") or ""
+        except Exception:
+            pass
+        d = filedialog.askdirectory(
+            title="Dossier de destination des diapos",
+            initialdir=cur or None,
+            parent=root)
+    finally:
+        root.destroy()
+    if d:
+        _api("/api/settings", {"local_dir": d})
+        icon.notify(f"Destination : {d}", "Nextevents")
+
+
+def _run_server():
     from nextevents.runner import scheduler
     from nextevents.settings import load_settings
     from nextevents.webapp import app
 
     load_settings()
     threading.Thread(target=scheduler, daemon=True).start()
-    threading.Thread(target=_open_when_ready, daemon=True).start()
-    print(f"Nextevents — http://127.0.0.1:{PORT}  (Ctrl+C pour quitter)")
-    app.run(host="127.0.0.1", port=PORT)
+    app.run(host="127.0.0.1", port=PORT, use_reloader=False)
+
+
+def _poll_status(icon):
+    """Met à jour l'infobulle et notifie les fins de génération."""
+    was_running = False
+    while True:
+        try:
+            s = _api("/api/status")
+            n = s["slides_count"]
+            last = s["last_run_iso"] or "jamais"
+            icon.title = (f"Nextevents — {n} diapos · {last}"
+                          + (" · génération…" if s["running"] else ""))
+            if was_running and not s["running"]:
+                if s["last_error"]:
+                    icon.notify(f"Échec : {s['last_error'][:200]}",
+                                "Nextevents — génération")
+                else:
+                    icon.notify(f"{n} diapos générées",
+                                "Nextevents — génération terminée")
+            was_running = s["running"]
+        except Exception:
+            icon.title = "Nextevents"
+        time.sleep(5)
+
+
+def _tray():
+    import pystray
+    from PIL import Image
+
+    icon = pystray.Icon(
+        "nextevents", Image.open(ICON), "Nextevents",
+        menu=pystray.Menu(
+            pystray.MenuItem(
+                "Générer maintenant",
+                lambda i, it: _api("/api/run", {}),
+                default=True),
+            pystray.MenuItem(
+                "Dossier de destination…",
+                lambda i, it: _pick_dir(i)),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem(
+                "Ouvrir les diapos",
+                lambda i, it: os.startfile(OUT_DIR)),
+            pystray.MenuItem(
+                "Réglages avancés",
+                lambda i, it: webbrowser.open(f"http://127.0.0.1:{PORT}/")),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Quitter", lambda i, it: i.stop()),
+        ))
+    threading.Thread(target=_poll_status, args=(icon,), daemon=True).start()
+    icon.run()
+
+
+def main():
+    threading.Thread(target=_run_server, daemon=True).start()
+    if getattr(sys, "frozen", False):
+        _tray()
+    else:
+        # mode dev : console + ouverture auto de la webui
+        def _open_when_ready():
+            for _ in range(100):
+                try:
+                    urllib.request.urlopen(
+                        f"http://127.0.0.1:{PORT}/", timeout=1)
+                    break
+                except Exception:
+                    time.sleep(0.3)
+            else:
+                return
+            webbrowser.open(f"http://127.0.0.1:{PORT}/")
+        threading.Thread(target=_open_when_ready, daemon=True).start()
+        print(f"Nextevents — http://127.0.0.1:{PORT}  (Ctrl+C pour quitter)")
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
 
 
 if __name__ == "__main__":

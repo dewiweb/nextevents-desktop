@@ -4,9 +4,10 @@
 
 from PyInstaller.utils.hooks import collect_all
 
-datas = [("upstream/assets", "assets")]
+datas = [("upstream/assets", "assets"), ("nextevents.ico", ".")]
 binaries = []
-hiddenimports = []
+# backend win32 de pystray est importé dynamiquement
+hiddenimports = ["pystray._win32"]
 
 # Playwright embarque son driver (node) — nécessaire même en canal
 # "msedge" (le navigateur est celui du système, pas de téléchargement)
@@ -34,7 +35,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name="nextevents",
-    console=True,  # console = journal de l'app
+    console=False,  # tray app — journal dans data/app.log
     icon="nextevents.ico",
     version="version.txt",
 )
