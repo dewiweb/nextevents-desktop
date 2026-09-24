@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<!--
+  Layout de la « diapo du jour » nextevents (1920×1080) : affichée en
+  direct pendant une rencontre à l'auditorium. Version sombre de la
+  charte (encre #141414, texte #efeae6), composition centrée avec le
+  sigle Champs Libres en filigrane — pas de visuel : titre,
+  intervenants et leurs qualités, animateur.
+  Rempli par nextevents/today.py via string.Template — variables :
+    $font_regular/$font_medium  fontes Oldschool Grotesk (base64 woff2)
+    $accent                     pastel de la card (pastille + filets)
+    $bg                         fond sombre (choisi dans la webui)
+    $light / $muted / $faint    texte principal / secondaire / discret
+    $variant                    « gt » si événement de série (grands
+                                témoins…) : modèle com transposé en
+                                sombre — rond marine, titre majuscule
+    $badge_html                 pastille catégorie ou rond de série
+    $h1_size                    taille du titre selon sa longueur
+    $title                      titre (échappé HTML)
+    $speakers_label             « Avec » (vide si pas d'intervenant)
+    $speakers_html              blocs intervenant : nom + qualité
+    $footer_html                pied de page : « animé par » + notes
+                                + mentions d'accessibilité
+                                (vide = aucun espace occupé)
+    $logo_mark                  logo Champs Libres (SVG, currentColor)
+-->
+<html lang="fr"><head><meta charset="utf-8">
+<style>
+@font-face{font-family:'Oldschool Grotesk';font-weight:400;
+ src:url(data:font/woff2;base64,$font_regular) format('woff2')}
+@font-face{font-family:'Oldschool Grotesk';font-weight:500;
+ src:url(data:font/woff2;base64,$font_medium) format('woff2')}
+*{margin:0;box-sizing:border-box}
+/* --k : facteur d'échelle global (1 = nominal). Le script en fin de
+   page le réduit tant que le contenu déborde de la carte — les
+   qualités/intervenants longs ne sont jamais tronqués, tout le layout
+   se tasse proportionnellement. */
+:root{--k:1}
+html,body{width:1920px;height:1080px;overflow:hidden}
+body{font-family:'Oldschool Grotesk',Arial,sans-serif;color:$light;
+ background:#000;display:flex;flex-direction:column}
+.card{position:relative;flex:1;background:$bg;border-radius:72px;
+ overflow:hidden;display:flex;flex-direction:column;align-items:center;
+ text-align:center;padding:calc(64px*var(--k)) 90px
+ calc(100px*var(--k))}
+/* le conteneur clippe les filigranes : sans lui leur débordement
+   gonflerait card.scrollHeight et tromperait la mesure d'auto-fit */
+.wms{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.watermark{position:absolute;color:rgba(239,234,230,.05)}
+.watermark svg{display:block;width:820px;height:820px}
+.watermark--tr{top:-260px;right:-260px}
+.watermark--bl{bottom:-260px;left:-260px}
+.tag{align-self:flex-start;background:$accent;color:#141414;
+ border-radius:2em;padding:calc(12px*var(--k)) calc(36px*var(--k));
+ font-size:calc(30px*var(--k));font-weight:500}
+h1{font-size:80px;font-weight:500;line-height:1.08;letter-spacing:-.01em;
+ margin-top:calc(36px*var(--k));max-width:1700px;text-wrap:balance;
+ display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;
+ overflow:hidden}
+.rule{height:3px;background:$accent;border-radius:2px;
+ margin-top:calc(44px*var(--k));width:calc(180px*var(--k))}
+.spacer{flex:1 1 0;min-height:0}
+.middle{flex:2;display:flex;flex-direction:column;align-items:center;
+ justify-content:center;min-height:0}
+.spk-label{font-size:calc(26px*var(--k));font-weight:500;
+ letter-spacing:.14em;text-transform:uppercase;color:$muted}
+.speakers{margin-top:calc(26px*var(--k));display:flex;
+ flex-direction:column;gap:calc(32px*var(--k));align-items:center;
+ min-height:0}
+.speaker{display:flex;flex-direction:column;gap:calc(2px*var(--k));
+ align-items:center}
+.speaker .name{font-size:calc(54px*var(--k));font-weight:500}
+.speaker .qual{font-size:calc(32px*var(--k));line-height:1.3;
+ color:$muted;max-width:1400px}
+.mod{margin-top:auto;padding-top:calc(34px*var(--k));
+ font-size:calc(34px*var(--k));color:$faint;
+ border-top:1px solid rgba(239,234,230,.12);width:100%}
+.mod-line b{font-weight:500;color:$light}
+.note-line{margin-top:calc(10px*var(--k));font-size:calc(24px*var(--k));
+ color:$muted}
+.access-line{margin-top:calc(10px*var(--k));
+ font-size:calc(24px*var(--k));color:$faint}
+.access-line::before{content:"◦ "}
+/* variante série (modèle com « Grands témoins » en sombre) :
+   rond marine, titre clair majuscule — composition centrée conservée */
+.gt-badge{flex:0 0 auto;align-self:flex-start;
+ width:calc(250px*var(--k));height:calc(250px*var(--k));
+ border-radius:50%;background:#3357a3;color:#fff;display:flex;
+ flex-direction:column;align-items:center;justify-content:center;
+ gap:calc(10px*var(--k));margin-bottom:calc(-185px*var(--k))}
+/* le rond de série (250px) est plus haut que la pastille .tag (~65px) :
+   marge négative pour que le titre reste à la même hauteur que sur les
+   autres diapos — le cercle déborde visuellement dans la zone vide */
+.gt-name{font-size:calc(36px*var(--k));font-weight:500;line-height:1.14;
+ text-transform:uppercase;letter-spacing:.02em;
+ padding:0 calc(26px*var(--k))}
+.gt-logo{color:rgba(255,255,255,.85);display:flex}
+.gt-logo svg{height:calc(32px*var(--k));width:auto}
+.card.gt h1{color:#eef3fb;text-transform:uppercase}
+.card.gt .rule{background:#a8bce0}
+.card.gt .spk-label{color:#7f93b8}
+.card.gt .speaker .name{color:#a8bce0}
+.card.gt .speaker .qual{color:#7f93b8}
+.card.gt .mod{color:#8aa0c8;border-top-color:rgba(159,180,216,.25)}
+.card.gt .mod-line b{color:#c9d6ee}
+
+</style></head><body>
+<div class="card$variant">
+  <div class="wms">
+    <div class="watermark watermark--tr">$logo_mark</div>
+    <div class="watermark watermark--bl">$logo_mark</div>
+  </div>
+  $badge_html
+  <div class="spacer"></div>
+  <h1 style="font-size:calc(${h1_size}px*var(--k))">$title</h1>
+  <div class="rule"></div>
+  <div class="middle">
+    <div class="spk-label">$speakers_label</div>
+    <div class="speakers">$speakers_html</div>
+  </div>
+  $footer_html
+</div>
+<script>
+// Auto-fit : réduit --k par paliers de 6% tant que le contenu déborde
+// de la carte (scrollHeight > clientHeight — .card a overflow:hidden,
+// le dépassement reste mesurable). Rejoué une fois les fontes chargées
+// (métriques réelles), avec possibilité de revenir vers 1 si la fonte
+// de repli surestimait l'encombrement.
+(function () {
+  var de = document.documentElement;
+  function fits() {
+    var c = document.querySelector('.card');
+    // la carte ne doit pas déborder (contenu poussé sous le bord)
+    if (c.scrollHeight > c.clientHeight + 2) return false;
+    // les intervenants doivent rester à ≥16 px du filet du pied de
+    // page — sinon la dernière ligne de qualité colle au séparateur
+    var spk = document.querySelector('.speakers');
+    if (spk && spk.firstElementChild) {
+      var r = spk.getBoundingClientRect();
+      // contenu centré dans .middle : déborde aussi par le haut
+      var m = document.querySelector('.middle').getBoundingClientRect();
+      if (r.top < m.top) return false;
+      var mod = document.querySelector('.mod');
+      var lim = mod ? mod.getBoundingClientRect().top
+                    : c.getBoundingClientRect().bottom - 40;
+      if (r.bottom > lim - 16) return false;
+    }
+    return true;
+  }
+  function fit() {
+    var k = parseFloat(de.style.getPropertyValue('--k')) || 1, i = 0;
+    while (fits() && k < 1 && i++ < 60) {
+      k = Math.min(1, k / 0.94);
+      de.style.setProperty('--k', k.toFixed(3));
+    }
+    i = 0;
+    while (!fits() && i++ < 80) {
+      k *= 0.94;
+      de.style.setProperty('--k', k.toFixed(3));
+    }
+  }
+  fit();
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(fit);
+  }
+})();
+</script>
+</body></html>

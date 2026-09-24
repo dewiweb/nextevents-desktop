@@ -17,10 +17,6 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
-          # upstream/ est privé : PAT avec accès en lecture à dewiweb/nextevents
-          token: ${{ secrets.UPSTREAM_PAT }}
 
       - uses: actions/setup-python@v5
         with:
@@ -59,3 +55,51 @@ jobs:
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
           files: dist/${{ env.ZIP_NAME }}
           generate_release_notes: true
+
+  build-linux:
+    # ubuntu-22.04 = glibc la plus ancienne supportée : l'AppImage
+    # produite tourne sur toute distro avec glibc >= 2.35
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements-desktop.txt
+
+      - name: Install Chromium headless shell (bundled) + libs système
+        # install-deps : les libs du headless shell doivent être
+        # présentes pour que linuxdeploy les embarque dans l'AppImage
+        run: |
+          export PLAYWRIGHT_BROWSERS_PATH=0
+          playwright install chromium --only-shell
+          sudo env "PATH=$PATH" playwright install-deps chromium
+          # libs que linuxdeploy doit trouver pour le plugin Qt xcb
+          sudo apt-get update && sudo apt-get install -y \
+            libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
+            libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0
+
+      - name: Build with PyInstaller
+        run: pyinstaller app.spec --noconfirm
+
+      - name: Build AppImage
+        run: |
+          tag="${{ github.ref_name }}"
+          if [ "${{ github.ref_type }}" != "tag" ]; then tag="${{ inputs.tag }}"; fi
+          appimage/build-appimage.sh "$tag"
+          echo "APPIMAGE_NAME=nextevents-linux-$tag.AppImage" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextevents-linux
+          path: dist/${{ env.APPIMAGE_NAME }}
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+          files: dist/${{ env.APPIMAGE_NAME }}

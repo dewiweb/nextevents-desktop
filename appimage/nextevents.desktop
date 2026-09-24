@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Nextevents
+Comment=Diaporama des événements — Champs Libres
+Exec=nextevents
+Icon=nextevents
+Categories=Utility;
+Terminal=false
