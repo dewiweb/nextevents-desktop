@@ -142,40 +142,27 @@ def _diag():
 def _pick_dir(icon):
     """Explorateur Windows → dossier de destination (local/mappé/UNC).
 
-    Dialogue natif SHBrowseForFolder : il a sa propre boucle de messages,
-    contrairement à tkinter qui gèle dans le thread du tray."""
+    Le dialogue tourne dans un processus PowerShell dédié : sa boucle de
+    messages est isolée — impossible à geler depuis le thread du tray,
+    et il est forcé au premier plan."""
+    import subprocess
     d = None
     try:
-        import pythoncom
-        from win32com.shell import shell, shellcon
-        pythoncom.CoInitialize()
-        try:
-            # 0x40 = BIF_NEWDIALOGSTYLE (absent de shellcon) ;
-            # BIF_EDITBOX permet de coller un chemin UNC directement
-            pidl, _, _ = shell.SHBrowseForFolder(
-                0, None, "Dossier de destination des diapos",
-                shellcon.BIF_RETURNONLYFSDIRS | shellcon.BIF_EDITBOX | 0x40)
-            if pidl:
-                d = shell.SHGetPathFromIDList(pidl)
-        finally:
-            pythoncom.CoUninitialize()
+        r = subprocess.run(
+            ["powershell", "-NoProfile", "-STA", "-Command",
+             "Add-Type -AssemblyName System.Windows.Forms;"
+             "$o=New-Object System.Windows.Forms.Form;"
+             "$o.TopMost=$true;$o.StartPosition='CenterScreen';"
+             "$o.Width=0;$o.Height=0;$o.ShowInTaskbar=$false;$o.Show();"
+             "$d=New-Object System.Windows.Forms.FolderBrowserDialog;"
+             "$d.Description='Dossier de destination des diapos';"
+             "$d.ShowNewFolderButton=$true;"
+             "if($d.ShowDialog($o) -eq 'OK'){Write-Output $d.SelectedPath};"
+             "$o.Close()"],
+            capture_output=True, text=True, timeout=300)
+        d = r.stdout.strip() or None
     except Exception:
         pass
-    if not d:
-        # repli : FolderBrowserDialog dans un PowerShell dédié
-        import subprocess
-        try:
-            r = subprocess.run(
-                ["powershell", "-NoProfile", "-STA", "-Command",
-                 "Add-Type -AssemblyName System.Windows.Forms;"
-                 "$d=New-Object System.Windows.Forms.FolderBrowserDialog;"
-                 "$d.Description='Dossier de destination des diapos';"
-                 "$d.ShowNewFolderButton=$true;"
-                 "if($d.ShowDialog() -eq 'OK'){Write-Output $d.SelectedPath}"],
-                capture_output=True, text=True, timeout=120)
-            d = r.stdout.strip() or None
-        except Exception:
-            pass
     if d:
         _api("/api/settings", {"local_dir": d})
         icon.notify(f"Destination : {d}", "Nextevents")
