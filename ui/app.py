@@ -18,11 +18,14 @@ def run(icon_path):
     from PySide6.QtNetwork import QLocalServer, QLocalSocket
     from PySide6.QtWidgets import (QApplication, QFileDialog, QMenu,
                                    QMessageBox, QSystemTrayIcon)
-    from .window import MainWindow, STYLE
+    from .window import MainWindow, STYLE, WheelGuard
 
     app = QApplication(sys.argv)
     app.setApplicationName("Nextevents")
     app.setStyleSheet(STYLE)
+    # la molette ne doit pas modifier les combos/spins lors du scroll
+    app._wheel_guard = WheelGuard(app)
+    app.installEventFilter(app._wheel_guard)
     icon = QIcon(str(icon_path))
     app.setWindowIcon(icon)
 

@@ -139,9 +139,13 @@ def _date_spec(timings):
         t3 = (today.year, today.month, today.day)
         pinned = first_b[:3] <= t3 <= last_e[:3]
         return date_spec, 0, "", first_b, last_e, pinned
-    # séance(s) ponctuelle(s) : la prochaine porte la date
+    # séance(s) ponctuelle(s) : la prochaine porte la date — préfixée
+    # « Prochaine séance : » quand l'événement est récurrent
     nx = next(iter(future))
-    return (f"{_fmt_day(nx[0])} à {_fmt_time(nx[0])}", len(future),
+    date_spec = f"{_fmt_day(nx[0])} à {_fmt_time(nx[0])}"
+    if len(future) > 1:
+        date_spec = f"Prochaine séance : {date_spec}"
+    return (date_spec, len(future),
             _duration(nx[0], nx[1]), nx[0], nx[0], False)
 
 

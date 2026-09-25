@@ -9,15 +9,42 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QDate, QTimer, Signal
-from PySide6.QtGui import QIcon, QKeySequence, QPixmap, QShortcut
+from PySide6.QtCore import Qt, QDate, QEvent, QObject, QTimer, Signal
+from PySide6.QtGui import (
+    QIcon, QKeySequence, QPixmap, QShortcut, QWheelEvent,
+)
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDateEdit, QDialog, QFileDialog, QFormLayout,
+    QAbstractScrollArea, QAbstractSpinBox, QApplication, QCheckBox,
+    QComboBox, QDateEdit, QDialog, QFileDialog, QFormLayout,
     QFrame, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMainWindow, QPlainTextEdit,
     QProgressBar, QPushButton, QScrollArea, QSpinBox, QStackedWidget,
     QTabWidget, QVBoxLayout, QWidget,
 )
+
+
+class WheelGuard(QObject):
+    """Empêche la molette de changer les combos/spin non focalisés :
+    l'événement est refilé au conteneur scrollable parent (QScrollArea),
+    donc la page scolle normalement sans risquer d'altérer une valeur.
+    Installé sur QApplication → couvre tous les onglets/dialogs."""
+    def eventFilter(self, obj, event):
+        if (event.type() == QEvent.Wheel
+                and isinstance(obj, (QComboBox, QAbstractSpinBox))
+                and not obj.hasFocus()):
+            p = obj.parentWidget()
+            while p is not None and not isinstance(p, QAbstractScrollArea):
+                p = p.parentWidget()
+            if p is not None:
+                vp = p.viewport()
+                QApplication.sendEvent(vp, QWheelEvent(
+                    obj.mapTo(vp, event.position().toPoint()),
+                    event.globalPosition(), event.pixelDelta(),
+                    event.angleDelta(), event.buttons(),
+                    event.modifiers(), event.phase(),
+                    event.inverted()))
+            return True
+        return False
 
 from nextevents.runner import run_generation, slides, slides_portrait
 from nextevents.settings import (
@@ -96,6 +123,7 @@ class MainWindow(QMainWindow):
     series_done = Signal(list)       # détection des séries (worker)
     zip_done = Signal(str)           # message de fin d'export
     thumbs_ready = Signal(int, list) # génération, vignettes galerie
+    thumbs_append = Signal(list)     # diapos apparues en cours de run
 
     def __init__(self, tray_ok, icon_path):
         super().__init__()
@@ -163,6 +191,7 @@ class MainWindow(QMainWindow):
         self.zip_done.connect(
             lambda m: self.statusBar().showMessage(m, 6000))
         self.thumbs_ready.connect(self._fill_gallery)
+        self.thumbs_append.connect(self._append_gallery)
 
         self._timer = QTimer(self, interval=500, timeout=self._poll)
         self._timer.start()
@@ -762,6 +791,8 @@ class MainWindow(QMainWindow):
             self._io_tick = 0
             self._n_slides = len(slides())
             self._sched_interval = load_settings()["interval_hours"]
+            if running:
+                self._gallery_incremental()
         lr = state["last_run"]
         try:
             last = (datetime.fromtimestamp(lr).strftime("%d/%m %H:%M")
@@ -967,6 +998,7 @@ class MainWindow(QMainWindow):
             files += [base / n for n in names]
         self.gallery.clear()
         if not files:
+            self._gal_seen = set()   # le suivi incrémental part de zéro
             it = QListWidgetItem(
                 "Aucune diapo — lancez une génération (Ctrl+G)")
             it.setFlags(Qt.NoItemFlags)
@@ -1001,6 +1033,60 @@ class MainWindow(QMainWindow):
         if gen != self._gal_gen:
             return  # un rafraîchissement plus récent est en cours
         self.gallery.clear()
+        self._gal_seen = {rel for rel, _, _, _ in items}
+        for rel, label, img, path in items:
+            it = QListWidgetItem(label)
+            it.setIcon(QPixmap.fromImage(img))
+            it.setData(Qt.UserRole, rel)
+            it.setToolTip(path)
+            self.gallery.addItem(it)
+
+    def _gallery_incremental(self):
+        """Ajoute à la galerie les PNG apparus depuis le dernier
+        passage — les diapos deviennent visibles pendant la génération
+        au lieu d'attendre la fin du run."""
+        seen = getattr(self, "_gal_seen", None)
+        if seen is None:
+            return  # premier remplissage pas encore fait
+        d = resolve_out_dir()
+        new = []
+        for sub, names in (("", slides()),
+                           ("portrait", slides_portrait())):
+            base = d / sub if sub else d
+            new += [base / n for n in names]
+        new = [p for p in new if str(p.relative_to(d)) not in seen]
+        if not new:
+            return
+        seen.update(str(p.relative_to(d)) for p in new)
+
+        def work():
+            from PySide6.QtGui import QImageReader
+            items = []
+            for p in new:
+                r = QImageReader(str(p))
+                sz = r.size()
+                if sz.isValid():
+                    sz.scale(280, 160, Qt.KeepAspectRatio)
+                    r.setScaledSize(sz)
+                img = r.read()
+                if img.isNull():
+                    continue
+                rel = str(p.relative_to(d))
+                label = p.name.removeprefix("slide-").removesuffix(".png")
+                if p.parent.name == "portrait":
+                    label += "  ▯"
+                items.append((rel, label, img, str(p)))
+            self.thumbs_append.emit(items)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _append_gallery(self, items):
+        if not items:
+            return
+        # retire le placeholder « aucune diapo » s'il est encore là
+        if (self.gallery.count() == 1
+                and not self.gallery.item(0).data(Qt.UserRole)):
+            self.gallery.clear()
         for rel, label, img, path in items:
             it = QListWidgetItem(label)
             it.setIcon(QPixmap.fromImage(img))

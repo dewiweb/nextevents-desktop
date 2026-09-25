@@ -166,6 +166,9 @@ def group_sessions(events):
         if len(g) > 1:
             ev["n_sessions"] = len(g)
             ev["specs"]["Séances"] = f"{len(g)} séances à venir"
+            d = ev["specs"].get("Date", "")
+            if d and not d.startswith("Prochaine séance"):
+                ev["specs"]["Date"] = f"Prochaine séance : {d}"
         out.append(ev)
     out.sort(key=lambda e: (
         0 if e.get("pinned") else 1, e.get("_dt") or (9999, 12, 31, 23, 59)))
