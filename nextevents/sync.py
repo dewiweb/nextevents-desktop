@@ -239,10 +239,6 @@ def sync_local(out_dir, cfg):
     if not dest:
         return
     out_dir = Path(out_dir)
-    dirs = [("landscape", out_dir / "landscape")] \
-        if (out_dir / "landscape").exists() else []
-    if (out_dir / "portrait").exists():
-        dirs.append(("portrait", out_dir / "portrait"))
-    for sub, src in dirs:
+    for sub, src in _dirs(out_dir, cfg, "local"):
         d = Path(dest) / sub if sub else Path(dest)
         _local_push_dir(src, d)

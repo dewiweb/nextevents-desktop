@@ -401,8 +401,26 @@ class MainWindow(QMainWindow):
         f.addRow("Au démarrage", self.autostart_ss)
         lay.addWidget(appbox)
 
-        dirs = QGroupBox("Dossiers locaux (disque / lecteur réseau)")
-        f = QFormLayout(dirs)
+        log = QGroupBox("Journal")
+        v = QVBoxLayout(log)
+        self.log = QPlainTextEdit(readOnly=True)
+        self.log.setPlaceholderText(
+            "Le journal de génération s'affichera ici.")
+        self.log.setStyleSheet(
+            "font-family:monospace;font-size:12.5px;color:#bfbbb8")
+        v.addWidget(self.log)
+        log.setMinimumHeight(180)
+        lay.addWidget(log, 1)
+        return outer
+
+    def _destinations_tab(self):
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(18, 14, 18, 14)
+        lay.setSpacing(14)
+
+        local = QGroupBox("Dossiers locaux (disque / lecteur réseau)")
+        f = QFormLayout(local)
         f.setLabelAlignment(Qt.AlignRight)
         self.out_dir = QLineEdit()
         self.out_dir.setPlaceholderText(
@@ -426,25 +444,15 @@ class MainWindow(QMainWindow):
         b.clicked.connect(lambda: self._browse(self.local_dir))
         row.addWidget(b)
         f.addRow("Copie miroir vers", row)
-        lay.addWidget(dirs)
-
-        log = QGroupBox("Journal")
-        v = QVBoxLayout(log)
-        self.log = QPlainTextEdit(readOnly=True)
-        self.log.setPlaceholderText(
-            "Le journal de génération s'affichera ici.")
-        self.log.setStyleSheet(
-            "font-family:monospace;font-size:12.5px;color:#bfbbb8")
-        v.addWidget(self.log)
-        log.setMinimumHeight(180)
-        lay.addWidget(log, 1)
-        return outer
-
-    def _destinations_tab(self):
-        w = QWidget()
-        lay = QVBoxLayout(w)
-        lay.setContentsMargins(18, 14, 18, 14)
-        lay.setSpacing(14)
+        row = QHBoxLayout()
+        self.local_ls = QCheckBox("Paysage")
+        self.local_pt = QCheckBox("Portrait")
+        row.addWidget(QLabel("Envoie :"))
+        row.addWidget(self.local_ls)
+        row.addWidget(self.local_pt)
+        row.addStretch(1)
+        f.addRow(row)
+        lay.addWidget(local)
 
         ftp = QGroupBox("Destination FTP")
         f = QFormLayout(ftp)
@@ -634,6 +642,8 @@ class MainWindow(QMainWindow):
             smb_send_portrait=int(self.smb_pt.isChecked()),
             out_dir=self.out_dir.text().strip(),
             local_dir=self.local_dir.text().strip(),
+            local_send_landscape=int(self.local_ls.isChecked()),
+            local_send_portrait=int(self.local_pt.isChecked()),
             close_to_tray=int(self.close_to_tray.isChecked()),
             oa_agenda=self.oa_agenda.text().strip(),
             data_source=self.data_source.currentData(),
@@ -752,6 +762,8 @@ class MainWindow(QMainWindow):
             self._secret_ph("smb_pass", s["smb_pass"]))
         self.out_dir.setText(s["out_dir"])
         self.local_dir.setText(s["local_dir"])
+        self.local_ls.setChecked(bool(s.get("local_send_landscape", 1)))
+        self.local_pt.setChecked(bool(s.get("local_send_portrait", 0)))
         self.oa_agenda.setText(s.get("oa_agenda") or "leschampslibres")
         i = self.data_source.findData(s.get("data_source") or "site")
         self.data_source.setCurrentIndex(max(i, 0))
