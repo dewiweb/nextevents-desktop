@@ -156,9 +156,12 @@ trousseau au premier enregistrement des réglages.
 Lancer `nextevents.exe` / l'AppImage → fenêtre principale :
 
 - **Général** — réglages (intervalle, nb d'événements, résolution,
-  layouts), dossiers locaux, journal de génération
+  layouts), dossiers locaux, journal de génération. Le layout
+  portrait propose deux formats : **A4** (impression, 150-300 dpi)
+  ou **écran 9:16** (écran 16:9 monté en vertical / totem)
 - **Destinations** — FTP/FTPS et SMB avec test de connexion. Les
-  synchros sont **miroir** : elles suppriment à distance les fichiers
+  synchros sont **miroir** avec la même arborescence (`landscape/`,
+  `portrait/`, `today/`) : elles suppriment à distance les fichiers
   générés (`slide-*`, `index`/`qr`) absents en local — utilisez un
   dossier de destination dédié ; préférez FTPS à FTP (identifiants
   chiffrés)

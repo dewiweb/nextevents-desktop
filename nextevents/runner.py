@@ -72,14 +72,15 @@ def scheduler():
 
 
 def slides():
-    d = resolve_out_dir()
+    """Diapos paysage (sous-dossier landscape/ de la sortie)."""
+    d = resolve_out_dir() / "landscape"
     if not d.exists():
         return []
     return sorted(p.name for p in d.glob("*.png"))
 
 
 def slides_portrait():
-    """Diapos portrait (sous-dossier, non poussées par les synchros)."""
+    """Diapos portrait (sous-dossier portrait/ de la sortie)."""
     d = resolve_out_dir() / "portrait"
     if not d.exists():
         return []

@@ -13,7 +13,8 @@ from .scrape import (
 )
 from .oa import oa_list_events
 from .slide import (
-    DESIGNS, render_all, slide_html, slide_name, SIZES, DEFAULT_SIZE,
+    render_all, slide_html, slide_name, SIZES, DEFAULT_SIZE,
+    portrait_key, portrait_size,
 )
 from .sync import sync_ftp, sync_local, sync_smb
 
@@ -62,7 +63,7 @@ def _render_set(events, fonts, dest, size, orientation="landscape"):
 
     print(f"  rendu {orientation} — {len(to_render)} à rendre "
           f"({len(expected_png) - len(to_render)} inchangées)…")
-    for pp in render_all(to_render, size):
+    for pp in render_all(to_render, size, orientation):
         print(f"  ✓ {pp.name}")
 
     pngs = sorted(dest.glob("*.png"))
@@ -191,16 +192,31 @@ def generate(out_dir=None, max_events=0, pages=99, cfg=None, size=DEFAULT_SIZE):
     print(f"4/5 Génération du dossier {out}/…")
     gen_landscape = cfg is None or cfg.get("gen_landscape", 1)
     gen_portrait = cfg and cfg.get("gen_portrait")
+    # migration : les diapos paysage vivaient à la racine avant
+    # landscape/ — on retire les restes de l'ancienne arborescence
+    # (fichiers générés uniquement : slide-*, html/, manifest.txt)
+    if gen_landscape:
+        for p in out.glob("slide-*.png"):
+            p.unlink(missing_ok=True)
+        hdir = out / "html"
+        if hdir.is_dir():
+            for p in hdir.glob("*.html"):
+                p.unlink(missing_ok=True)
+            try:
+                hdir.rmdir()
+            except OSError:
+                pass
+        (out / "manifest.txt").unlink(missing_ok=True)
     pngs = []
     if gen_landscape:
-        pngs = _render_set(events, fonts, out, size)
+        pngs = _render_set(events, fonts, out / "landscape", size)
     if gen_portrait:
-        # format A4 portrait (HD → 1240×1754 à 150 dpi, UHD → 2480×3508
-        # à 300 dpi) dans un sous-dossier : pas poussé par les synchros,
-        # destiné à la com (impression / écrans verticaux)
-        scale = size[0] / DESIGNS["landscape"][0]
-        psize = tuple(round(d * scale) for d in DESIGNS["portrait"])
-        _render_set(events, fonts, out / "portrait", psize, "portrait")
+        # portrait A4 (impression, 150-300 dpi) ou écran 9:16 (écran
+        # pivoté) selon portrait_format — sous-dossier portrait/,
+        # pas poussé par les synchros paysage par défaut
+        fmt = (cfg or {}).get("portrait_format") or "a4"
+        _render_set(events, fonts, out / "portrait",
+                    portrait_size(size, fmt), portrait_key(fmt))
 
     if cfg:
         if cfg.get("ftp_host"):

@@ -36,13 +36,35 @@ ICON_PATH_ATTRS = {"accessibility": ' fill-rule="evenodd" clip-rule="evenodd"'}
 
 # gabarit de conception par orientation : le HTML est dessiné pour ces
 # dimensions, le PNG final est mis à l'échelle via device_scale_factor.
-# Le portrait suit le ratio A4 (1:√2) — pensé pour l'impression.
-DESIGNS = {"landscape": (1920, 1080), "portrait": (1240, 1754)}
+# Deux déclinaisons portrait : A4 (1:√2, pensée pour l'impression) et
+# écran (9:16, pour un écran 16:9 monté en vertical).
+DESIGNS = {
+    "landscape": (1920, 1080),
+    "portrait": (1240, 1754),
+    "portrait-screen": (1080, 1920),
+}
 TEMPLATES = {
     "landscape": "slide_template.html",
     "portrait": "slide_template_portrait.html",
+    "portrait-screen": "slide_template_portrait_screen.html",
 }
 _TEMPLATES = {}
+
+
+def portrait_size(size, fmt="a4"):
+    """Dimensions de sortie portrait pour une taille paysage `size` :
+    « a4 » suit le ratio 1:√2 à la même densité que le paysage
+    (HD → 1240×1754 ≈ 150 dpi, UHD → 2480×3508 ≈ 300 dpi) ;
+    « screen » est l'écran pivoté (HD → 1080×1920, UHD → 2160×3840)."""
+    if fmt == "screen":
+        return (size[1], size[0])
+    scale = size[0] / DESIGNS["landscape"][0]
+    return tuple(round(d * scale) for d in DESIGNS["portrait"])
+
+
+def portrait_key(fmt="a4"):
+    """Clé d'orientation (DESIGNS/TEMPLATES) pour un format portrait."""
+    return "portrait-screen" if fmt == "screen" else "portrait"
 
 
 def _template(orientation="landscape"):
@@ -77,7 +99,7 @@ def asset_svg(name):
 
 
 def slide_html(ev, idx, fonts, orientation="landscape"):
-    portrait = orientation == "portrait"
+    portrait = orientation.startswith("portrait")
     bg, dark = CARD_COLORS.get(ev.get("color"), CARD_COLORS[None])
     tag = ev.get("tag") or ev["specs"].get("Catégorie") or "Événement"
     # les temps forts se déroulent à plusieurs endroits du bâtiment :
@@ -91,7 +113,10 @@ def slide_html(ev, idx, fonts, orientation="landscape"):
     )
     n_title = len(ev["title"])
     if portrait:
-        h1_size = 76 if n_title < 50 else 62 if n_title < 80 else 50
+        if orientation == "portrait-screen":
+            h1_size = 70 if n_title < 50 else 57 if n_title < 80 else 46
+        else:
+            h1_size = 76 if n_title < 50 else 62 if n_title < 80 else 50
     else:
         h1_size = 80 if n_title < 50 else 64 if n_title < 80 else 52
     specs_cls = "specs specs--tight" if len(keys) >= 4 else "specs"
@@ -197,12 +222,12 @@ def _save_atomic(img, path):
     os.replace(tmp, path)
 
 
-def render_all(slides, size=DEFAULT_SIZE):
+def render_all(slides, size=DEFAULT_SIZE, orientation="landscape"):
     """Rend les diapos via Playwright/Chromium (viewport aux dimensions
     de conception + device_scale_factor → texte vectoriel ultra net).
     Repli Firefox si Playwright est absent."""
     w, h = size
-    dw, dh = DESIGNS["portrait" if h > w else "landscape"]
+    dw, dh = DESIGNS[orientation]
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:

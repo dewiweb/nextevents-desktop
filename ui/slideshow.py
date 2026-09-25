@@ -118,7 +118,7 @@ class SlideshowWindow(QMainWindow):
 
     def _dir(self):
         d = resolve_out_dir()
-        return d / "portrait" if self.portrait else d
+        return d / ("portrait" if self.portrait else "landscape")
 
     def _files(self):
         d = self._dir()

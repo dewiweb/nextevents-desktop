@@ -295,14 +295,22 @@ class MainWindow(QMainWindow):
         self.res.setFixedWidth(220)
         self.res.addItem("UHD 3840×2160", "uhd")
         self.res.addItem("HD 1920×1080", "hd")
-        self.gen_ls = QCheckBox("Paysage — poussé vers les partages")
-        self.gen_pt = QCheckBox("Portrait — local seulement "
-                                "(portrait/, zip)")
+        self.gen_ls = QCheckBox("Paysage — dans le dossier de sortie")
+        self.gen_pt = QCheckBox("Portrait — sous-dossier portrait/")
+        self.portrait_fmt = QComboBox()
+        self.portrait_fmt.addItem("A4 — impression", "a4")
+        self.portrait_fmt.addItem("Écran 9:16 — diffusion", "screen")
+        self.portrait_fmt.setEnabled(False)
+        self.gen_pt.toggled.connect(self.portrait_fmt.setEnabled)
+        prow = QHBoxLayout()
+        prow.addWidget(self.gen_pt)
+        prow.addWidget(self.portrait_fmt)
+        prow.addStretch(1)
         f.addRow("Rafraîchissement auto", self.interval)
         f.addRow("Diapos générées", row)
         f.addRow("Résolution", self.res)
         f.addRow("Layouts générés", self.gen_ls)
-        f.addRow("", self.gen_pt)
+        f.addRow("", prow)
         lay.addWidget(sett)
 
         catsbox = QGroupBox("Catégories générées")
@@ -607,6 +615,7 @@ class MainWindow(QMainWindow):
             resolution=self.res.currentData(),
             gen_landscape=int(self.gen_ls.isChecked()),
             gen_portrait=int(self.gen_pt.isChecked()),
+            portrait_format=self.portrait_fmt.currentData(),
             gen_categories=",".join(
                 slug for slug, cb in self._cat_boxes.items()
                 if cb.isChecked()),
@@ -718,6 +727,9 @@ class MainWindow(QMainWindow):
             max(0, self.res.findData(s["resolution"])))
         self.gen_ls.setChecked(bool(s["gen_landscape"]))
         self.gen_pt.setChecked(bool(s["gen_portrait"]))
+        i = self.portrait_fmt.findData(s.get("portrait_format") or "a4")
+        self.portrait_fmt.setCurrentIndex(max(i, 0))
+        self.portrait_fmt.setEnabled(bool(s["gen_portrait"]))
         enabled = set((s.get("gen_categories") or "").split(","))
         for slug, cb in self._cat_boxes.items():
             cb.setChecked(slug in enabled)
@@ -1017,10 +1029,9 @@ class MainWindow(QMainWindow):
         gen = self._gal_gen
         d = resolve_out_dir()
         files = []
-        for sub, names in (("", slides()),
+        for sub, names in (("landscape", slides()),
                            ("portrait", slides_portrait())):
-            base = d / sub if sub else d
-            files += [base / n for n in names]
+            files += [d / sub / n for n in names]
         self.gallery.clear()
         if not files:
             self._gal_seen = set()   # le suivi incrémental part de zéro
@@ -1072,10 +1083,9 @@ class MainWindow(QMainWindow):
         au lieu d'attendre la fin du run."""
         d = resolve_out_dir()
         new = []
-        for sub, names in (("", slides()),
+        for sub, names in (("landscape", slides()),
                            ("portrait", slides_portrait())):
-            base = d / sub if sub else d
-            new += [base / n for n in names]
+            new += [d / sub / n for n in names]
         new = [p for p in new
                if (rel := str(p.relative_to(d))) not in self._gal_seen
                and rel not in self._gal_pending]
@@ -1148,7 +1158,8 @@ class MainWindow(QMainWindow):
     def _regen_slide(self, it):
         """Re-rend une seule diapo depuis events.json (image servie par
         le cache — pas de re-téléchargement si elle n'a pas changé)."""
-        from nextevents.slide import DEFAULT_SIZE, SIZES
+        from nextevents.slide import (
+            DEFAULT_SIZE, SIZES, portrait_key, portrait_size)
         rel = it.data(Qt.UserRole)
         ev = self._event_for(Path(rel).stem)
         if not ev:
@@ -1161,7 +1172,14 @@ class MainWindow(QMainWindow):
             return
         stem = Path(rel).stem
         portrait = rel.startswith("portrait/")
-        size = SIZES.get(load_settings().get("resolution"), DEFAULT_SIZE)
+        sub = Path(rel).parent
+        if str(sub) == ".":  # rel ancien format sans sous-dossier
+            sub = Path("portrait" if portrait else "landscape")
+        cfg = load_settings()
+        size = SIZES.get(cfg.get("resolution"), DEFAULT_SIZE)
+        fmt = cfg.get("portrait_format") or "a4"
+        orientation = portrait_key(fmt) if portrait else "landscape"
+        psize = portrait_size(size, fmt) if portrait else size
         self.statusBar().showMessage(f"Régénération de {stem}…")
 
         def work():
@@ -1170,17 +1188,17 @@ class MainWindow(QMainWindow):
                 from nextevents.slide import render_all, slide_html
                 download_image(ev)
                 fonts = ensure_fonts()
-                dest = resolve_out_dir() / ("portrait" if portrait else "")
+                dest = resolve_out_dir() / sub
                 (dest / "html").mkdir(exist_ok=True)
                 hp = dest / "html" / f"{stem}.html"
                 hp.write_text(
-                    slide_html(ev, 0, fonts,
-                               "portrait" if portrait else "landscape"),
+                    slide_html(ev, 0, fonts, orientation),
                     encoding="utf-8")
                 # render_all est un générateur : il faut l'itérer
                 # pour que le rendu s'exécute
                 if not list(render_all(
-                        [(hp, dest / f"{stem}.png")], size)):
+                        [(hp, dest / f"{stem}.png")], psize,
+                        orientation)):
                     raise RuntimeError("rendu vide")
                 self.regen_done.emit(rel, f"{stem} régénérée")
             except Exception as e:
@@ -1259,8 +1277,8 @@ class MainWindow(QMainWindow):
         for it in items:
             base = Path(it.data(Qt.UserRole)).name
             stem = Path(base).stem
-            for p in {d / base, d / "portrait" / base,
-                      d / "html" / f"{stem}.html",
+            for p in {d / "landscape" / base, d / "portrait" / base,
+                      d / "landscape" / "html" / f"{stem}.html",
                       d / "portrait" / "html" / f"{stem}.html"}:
                 try:
                     p.unlink(missing_ok=True)
@@ -1268,8 +1286,8 @@ class MainWindow(QMainWindow):
                     pass
         # manifeste : refléter la suppression dès maintenant (les
         # synchros suppriment à distance ce qui est absent en local)
-        for sub in ("", "portrait"):
-            dd = d / sub if sub else d
+        for sub in ("landscape", "portrait"):
+            dd = d / sub
             mf = dd / "manifest.txt"
             if mf.exists():
                 mf.write_text(

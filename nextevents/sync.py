@@ -1,6 +1,7 @@
 """Synchro du dossier de sortie vers FTP, partage SMB et/ou dossier
-local (disque, lecteur réseau mappé, chemin UNC). Ne supprime à
-distance que les .png/.html absents en local.
+local (disque, lecteur réseau mappé, chemin UNC). Arborescence
+identique des deux côtés : landscape/, portrait/, today/. Ne
+supprime à distance que les fichiers générés absents en local.
 
 Chaque destination choisit ce qu'elle reçoit via ses réglages :
 `<proto>_send_landscape` (défaut oui — racine) et `<proto>_send_portrait`
@@ -18,11 +19,14 @@ def _ours(name):
 
 
 def _dirs(out_dir, cfg, proto):
-    """Dossiers locaux à pousser : (sous-chemin distant, chemin local)."""
+    """Dossiers locaux à pousser : (sous-chemin distant, chemin local).
+    Arborescence identique en local et à distance : landscape/ →
+    landscape/, portrait/ → portrait/, today/ → today/."""
     out_dir = Path(out_dir)
     dirs = []
-    if cfg.get(f"{proto}_send_landscape", 1):
-        dirs.append(("", out_dir))
+    if cfg.get(f"{proto}_send_landscape", 1) \
+            and (out_dir / "landscape").exists():
+        dirs.append(("landscape", out_dir / "landscape"))
     if cfg.get(f"{proto}_send_portrait") and (out_dir / "portrait").exists():
         dirs.append(("portrait", out_dir / "portrait"))
     return dirs
@@ -235,7 +239,8 @@ def sync_local(out_dir, cfg):
     if not dest:
         return
     out_dir = Path(out_dir)
-    dirs = [("", out_dir)]
+    dirs = [("landscape", out_dir / "landscape")] \
+        if (out_dir / "landscape").exists() else []
     if (out_dir / "portrait").exists():
         dirs.append(("portrait", out_dir / "portrait"))
     for sub, src in dirs:

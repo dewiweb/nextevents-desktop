@@ -28,6 +28,7 @@ DEFAULTS = {
     "resolution": "uhd",
     "gen_landscape": 1,
     "gen_portrait": 0,
+    "portrait_format": "a4",  # a4 (impression) | screen (écran 9:16)
     "gen_categories": "rencontres-aux-champs-libres,"
                       "concerts-aux-champs-libres,"
                       "projections-aux-champs-libres,"
