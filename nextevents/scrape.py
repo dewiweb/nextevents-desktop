@@ -47,6 +47,37 @@ CARD_COLORS = {
 # série — double canal, la page série est la source exhaustive.
 SERIES = {"les-grands-temoins": "Les grands témoins"}
 
+# format du réglage series_map : une ligne « identifiant = Libellé »
+# (slug de page série du site ou keyword OpenAgenda — c'est le même
+# tableau des deux côtés : les clés diffèrent selon la source)
+
+
+def parse_series(text):
+    """« cle = Libellé » ou « cle = Libellé | chemin/logo.png » par
+    ligne → liste de (cle, libellé, logo). Lignes vides/# ignorées."""
+    out = []
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, rest = line.split("=", 1)
+        label, _, logo = rest.partition("|")
+        k, label, logo = k.strip(), label.strip(), logo.strip()
+        if k and label:
+            out.append((k, label, logo or None))
+    return out
+
+
+def parse_series_map(text):
+    """cle → libellé (matching site/OA — le logo ne sert qu'au rendu)."""
+    return {k: l for k, l, _ in parse_series(text)}
+
+
+def series_logo(text, label):
+    """Chemin du logo associé au libellé de série, ou None."""
+    return next((g for _, l, g in parse_series(text)
+                 if l == label and g), None)
+
 SPEC_ICONS = {"Date": "calendar", "Séances": "calendar", "Durée": "timer",
               "Lieu": "pin", "Tarif": "ticket", "Public": "group",
               "Accessibilité": "accessibility"}
@@ -189,7 +220,7 @@ def list_events(max_pages=99, categories=None):
     return events
 
 
-def parse_detail(ev):
+def parse_detail(ev, series_map=None):
     """Complète un événement avec sa page détail : description, image HD,
     crédit, durée, couleur de bannière."""
     try:
@@ -259,7 +290,7 @@ def parse_detail(ev):
     # appartenance à une série : bloc richtext « En savoir plus » vers
     # /au-programme/<slug> ou <h2> au nom de la série (présent sur une
     # partie seulement des pages — mark_series complète via la page série)
-    for slug, label in SERIES.items():
+    for slug, label in (series_map or SERIES).items():
         if soup.find("a", href=re.compile(rf"/{slug}\b")) or soup.find(
                 lambda t: t.name == "h2"
                 and label.lower() in t.get_text().lower()):
@@ -314,14 +345,15 @@ def _extract_access(text):
     return "\n".join(out)
 
 
-def mark_series(events):
+def mark_series(events, series_map=None):
     """Marque ev['series'] d'après les pages séries du site — source
     exhaustive (toutes les pages détail ne portent pas le bloc série)."""
-    for slug, label in SERIES.items():
+    for slug, label in (series_map or SERIES).items():
         try:
             html_text = get(f"{BASE}/au-programme/{slug}").text
-        except Exception as e:
-            print(f"  ! page série {slug} KO : {e}")
+        except Exception:
+            # normal : les clés peuvent être des keywords OpenAgenda
+            # sans page correspondante sur le site
             continue
         ids = set(re.findall(r"/au-programme/[^\"'<>]+/(\d+)", html_text))
         for ev in events:

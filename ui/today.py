@@ -12,11 +12,12 @@ import threading
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPixmap
 from PySide6.QtWidgets import (
-    QComboBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
+    QComboBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
     QPlainTextEdit, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
 from nextevents.settings import load_settings, resolve_out_dir
+from nextevents.scrape import series_logo
 from nextevents.slide import SIZES, DEFAULT_SIZE
 
 BG_CHOICES = [
@@ -25,6 +26,34 @@ BG_CHOICES = [
     ("#312a28", "Terre nuit"), ("#313134", "Bleu nuit"),
     ("#3d1813", "Rouge nuit"), ("#16203f", "Marine (séries)"),
 ]
+
+# accent = pastel de la pastille/règle/badge série ; None = couleur
+# éditoriale de la carte de l'événement (site — OA n'en a pas)
+ACCENT_CHOICES = [
+    (None, "Auto (couleur de la carte)"),
+    ("#efeae6", "Gris pâle"), ("#f6e3bb", "Jaune pâle"),
+    ("#c6d2c9", "Vert pâle"), ("#e3c2b7", "Rouge pâle"),
+    ("#e2dff0", "Bleu pâle"),
+]
+
+
+class _Thumb(QLabel):
+    """Vignette cliquable — même idée que la galerie (clic = aperçu)."""
+    clicked = Signal()
+
+    def __init__(self, tooltip):
+        super().__init__("—")
+        self.setFixedSize(300, 170)
+        self.setAlignment(Qt.AlignCenter)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip(tooltip)
+        self.setStyleSheet(
+            "border:1px solid #3a3836;border-radius:8px;color:#8f8c8a")
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(e)
 
 
 class _Swatch(QPushButton):
@@ -46,9 +75,17 @@ class _Swatch(QPushButton):
             p.setPen(Qt.NoPen)
             p.setBrush(QColor("#f6e3bb"))
             p.drawEllipse(1, 1, 38, 38)
-        p.setPen(Qt.NoPen)
-        p.setBrush(QColor(self.value))
-        p.drawEllipse(6, 6, 28, 28)
+        if self.value is None:
+            # pastille « auto » : cercle pointillé + A
+            from PySide6.QtGui import QPen
+            p.setPen(QPen(QColor("#8f8c8a"), 2, Qt.DashLine))
+            p.setBrush(Qt.NoBrush)
+            p.drawEllipse(8, 8, 24, 24)
+            p.drawText(self.rect(), Qt.AlignCenter, "A")
+        else:
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(self.value))
+            p.drawEllipse(6, 6, 28, 28)
 
 
 class TodayTab(QWidget):
@@ -60,9 +97,20 @@ class TodayTab(QWidget):
         self._events = []
         self._busy = False
         self.bg = BG_CHOICES[0][0]
+        self.accent = None  # auto = couleur éditoriale de la carte
         self.gen_done.connect(self._on_gen_done)
 
-        outer = QVBoxLayout(self)
+        # scroll si la fenêtre est trop courte (comme l'onglet Général)
+        outer_wrap = QVBoxLayout(self)
+        outer_wrap.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea(widgetResizable=True)
+        from PySide6.QtWidgets import QFrame
+        scroll.setFrameShape(QFrame.NoFrame)
+        inner = QWidget()
+        scroll.setWidget(inner)
+        outer_wrap.addWidget(scroll)
+
+        outer = QVBoxLayout(inner)
         outer.setContentsMargins(18, 14, 18, 14)
         outer.setSpacing(12)
 
@@ -109,6 +157,16 @@ class TodayTab(QWidget):
         row.addStretch(1)
         form.addLayout(row)
 
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Accent"))
+        self._accents = []
+        for v, name in ACCENT_CHOICES:
+            b = _Swatch(v, name, self._pick_accent, lambda: self.accent)
+            self._accents.append(b)
+            row.addWidget(b)
+        row.addStretch(1)
+        form.addLayout(row)
+
         f = QFormLayout()
         f.setLabelAlignment(Qt.AlignRight)
         self.note = QPlainTextEdit()
@@ -127,6 +185,24 @@ class TodayTab(QWidget):
         self.access_hint.setWordWrap(True)
         form.addWidget(self.access_hint)
         form.addStretch(1)
+
+        # vignettes de la diapo générée (comme la galerie : clic =
+        # aperçu, supprimable) — épinglées en bas de la colonne
+        prow = QHBoxLayout()
+        self.thumb = _Thumb("Diapo du jour — cliquer pour agrandir")
+        self.thumb.clicked.connect(lambda: self._preview("index.png"))
+        prow.addWidget(self.thumb)
+        self.qr_thumb = _Thumb("Slide QR de la série — idem")
+        self.qr_thumb.clicked.connect(lambda: self._preview("qr.png"))
+        prow.addWidget(self.qr_thumb)
+        rm = QPushButton("Supprimer")
+        rm.setProperty("danger", True)
+        rm.setToolTip("Supprime les fichiers générés (index + QR) "
+                      "du dossier today/")
+        rm.clicked.connect(self._delete_today)
+        prow.addWidget(rm, alignment=Qt.AlignBottom)
+        prow.addStretch(1)
+        form.addLayout(prow)
         cols.addLayout(form, 3)
 
         right = QVBoxLayout()
@@ -156,6 +232,7 @@ class TodayTab(QWidget):
         outer.addLayout(row)
 
         self.load_events()
+        self._refresh_thumbs()
         if not self._spk_box.count():
             self._add_speaker("", "")
 
@@ -185,6 +262,11 @@ class TodayTab(QWidget):
     def _pick_bg(self, v):
         self.bg = v
         for b in self._swatches:
+            b.update()
+
+    def _pick_accent(self, v):
+        self.accent = v
+        for b in self._accents:
             b.update()
 
     def _add_speaker(self, name, qual):
@@ -255,12 +337,16 @@ class TodayTab(QWidget):
             "title": self.title.text().strip(),
             "tag": e.get("tag") or "",
             "color": e.get("color") or None,
+            "accent": self.accent,
             "bg": self.bg,
             "speakers": self._speakers(),
             "moderator": self.moderator.text().strip(),
             "note": self.note.toPlainText().strip(),
             "access": self.access.toPlainText().strip(),
             "series": e.get("series") or "",
+            "series_logo": series_logo(
+                (load_settings() or {}).get("series_map", ""),
+                e.get("series") or ""),
         }
 
     def _generate(self):
@@ -301,9 +387,43 @@ class TodayTab(QWidget):
         self._main.progress.hide()
         self._main.statusBar().showMessage(
             "Diapo du jour : " + msg, 6000)
+        self._refresh_thumbs()
 
-    def _preview(self):
-        p = resolve_out_dir() / "today" / "index.png"
+    def _refresh_thumbs(self):
+        """Recharge les vignettes today/ (index + QR) ou le tiret si
+        rien n'est généré — appelé après génération et suppression."""
+        d = resolve_out_dir() / "today"
+        for w, name in ((self.thumb, "index.png"),
+                        (self.qr_thumb, "qr.png")):
+            p = d / name
+            pix = QPixmap(str(p)) if p.exists() else QPixmap()
+            w.setPixmap(pix.scaled(w.width() - 4, w.height() - 4,
+                                   Qt.KeepAspectRatio,
+                                   Qt.SmoothTransformation)
+                        if not pix.isNull() else QPixmap())
+            w.setText("" if not pix.isNull() else "—")
+
+    def _delete_today(self):
+        """Supprime les fichiers générés de today/ (HTML + PNG, index et
+        QR) — les destinations déjà poussées ne sont pas touchées."""
+        d = resolve_out_dir() / "today"
+        files = [d / f for f in ("index.html", "index.png",
+                                 "qr.html", "qr.png") if (d / f).exists()]
+        if not files:
+            self.gen_lbl.setText("rien à supprimer")
+            return
+        r = QMessageBox.question(
+            self, "Supprimer la diapo du jour",
+            f"Supprimer {len(files)} fichier(s) généré(s) ?")
+        if r != QMessageBox.Yes:
+            return
+        for f in files:
+            f.unlink(missing_ok=True)
+        self._refresh_thumbs()
+        self.gen_lbl.setText("diapo du jour supprimée")
+
+    def _preview(self, name="index.png"):
+        p = resolve_out_dir() / "today" / name
         if not p.exists():
             self.gen_lbl.setText("pas encore générée")
             return

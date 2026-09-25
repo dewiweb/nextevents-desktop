@@ -19,6 +19,11 @@ DEFAULTS = {
     "oa_api_key": "",
     "oa_agenda": "leschampslibres",
     "data_source": "site",   # site | openagenda
+    # séries éditoriales : « identifiant = Libellé » par ligne —
+    # slug de page série du site ou keyword OpenAgenda
+    "series_map":
+        "les-grands-temoins = Les grands témoins\n"
+        "grandstemoins = Les grands témoins",
     "resolution": "uhd",
     "gen_landscape": 1,
     "gen_portrait": 0,

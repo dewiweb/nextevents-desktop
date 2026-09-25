@@ -51,8 +51,7 @@ OA_TAG_LABEL = {
     "atelier-4c": "Rendez-vous 4C",
 }
 
-# mots-clés OA → série éditoriale (le site n'expose que les grands
-# témoins comme série dédiée ; étendre si de nouvelles séries naissent)
+# défaut si le réglage series_map est vide — voir parse_series_map
 SERIES_KEYWORDS = {"grandstemoins": "Les grands témoins"}
 
 # mots-clés OA « déficiences » → mention d'accessibilité actionnable
@@ -73,6 +72,19 @@ PUBLIC_LABEL = {"Tous publics": "Tout public"}  # wording du site
 
 
 # ———————————————————— formatage ————————————————————
+
+def _clean_md(text):
+    """OA sert les descriptions en markdown-lite — on enlève les
+    marqueurs pour le rendu texte des diapos."""
+    if not text:
+        return ""
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)   # **gras**
+    text = re.sub(r"__(.+?)__", r"\1", text)       # __gras__
+    text = re.sub(r"(?<!\w)\*(.+?)\*(?!\w)", r"\1", text)  # *ital*
+    text = re.sub(r"\[(.+?)\]\([^)]*\)", r"\1", text)      # [lien](url)
+    text = re.sub(r"^#+\s*", "", text, flags=re.M)         # ## titre
+    return text.strip()
+
 
 def _local(dt):
     """ISO → tuple (a, m, j, h, min) en heure de Paris."""
@@ -149,7 +161,7 @@ def _timings_pairs(raw):
 
 def _base_map(e, cat_value, cat_label, public_label, kws, cond, timings,
               title, url, desc, desc_long, html_txt, image, credit, lieu,
-              access_codes, age=None):
+              access_codes, age=None, series_map=None):
     """Construit le dict événement commun (v2 et legacy convergent ici).
     `e` ne sert que de référence pour l'uid/canonicalUrl éventuels."""
     pairs = _timings_pairs(timings)
@@ -180,6 +192,7 @@ def _base_map(e, cat_value, cat_label, public_label, kws, cond, timings,
     tag = OA_TAG_LABEL.get(cat_value, cat_label or "Événement")
     if tag == "Temps fort":
         specs.pop("Lieu", None)  # multi-sites : le lieu prête à confusion
+    desc, desc_long = _clean_md(desc), _clean_md(desc_long)
 
     # intervenants / animateur / notes : même heuristiques que le site
     # (la description détaillée est du texte libre dans les deux cas)
@@ -197,8 +210,9 @@ def _base_map(e, cat_value, cat_label, public_label, kws, cond, timings,
     if access:
         specs["Accessibilité"] = access.replace("\n", " · ")
 
-    series = next((lbl for k, lbl in SERIES_KEYWORDS.items() if k in kws),
-                  "")
+    series = next((lbl for k, lbl
+                   in (series_map or SERIES_KEYWORDS).items()
+                   if k in kws), "")
 
     return {
         "title": title, "url": url, "tag": tag, "color": None,
@@ -210,10 +224,13 @@ def _base_map(e, cat_value, cat_label, public_label, kws, cond, timings,
         "series": series, "image": image, "card_img": image,
         "credit": credit, "_dt": dt, "_dt_end": dt_end,
         "pinned": pinned, "_source": "oa", "_oa_cat": cat_value,
+        # keywords bruts conservés : base d'un éventuel filtre thématique
+        # (fetedelascience, vacances…) — pas affichés sur la diapo
+        "keywords": kws,
     }
 
 
-def _map_v2(e, cat_opts, pub_opts, agenda):
+def _map_v2(e, cat_opts, pub_opts, agenda, series_map=None):
     cat_id = e.get("categorie")
     cat_value, cat_label = (cat_opts.get(cat_id) or (None, None))
     pub_ids = e.get("publics") or []
@@ -244,10 +261,10 @@ def _map_v2(e, cat_opts, pub_opts, agenda):
         (e.get("html") or {}).get("fr", ""),
         image, e.get("imageCredits") or "",
         (e.get("location") or {}).get("name", ""),
-        acc_codes, e.get("age"))
+        acc_codes, e.get("age"), series_map)
 
 
-def _map_legacy(e):
+def _map_legacy(e, series_map=None):
     cat_value = cat_label = None
     pubs = []
     for g in e.get("tagGroups") or []:
@@ -268,7 +285,7 @@ def _map_legacy(e):
         (e.get("html") or {}).get("fr", ""),
         e.get("originalImage") or e.get("image"),
         e.get("imageCredits") or "", e.get("locationName", ""),
-        e.get("accessibility") or [], e.get("age"))
+        e.get("accessibility") or [], e.get("age"), series_map)
 
 
 # ———————————————————— fetch ————————————————————
@@ -291,7 +308,7 @@ def _resolve_uid(agenda):
     return int(m.group(1))
 
 
-def _v2_events(agenda, key):
+def _v2_events(agenda, key, series_map=None):
     """API v2 officielle : schéma (libellés catégorie/public) puis
     événements à venir paginés."""
     a = _get(f"{API}/agendas/{agenda}",
@@ -318,10 +335,11 @@ def _v2_events(agenda, key):
         offset += len(d.get("events", [])) or 100
         if not d.get("events") or offset >= total:
             break
-    return [_map_v2(e, cat_opts, pub_opts, agenda) for e in events]
+    return [_map_v2(e, cat_opts, pub_opts, agenda, series_map)
+            for e in events]
 
 
-def _legacy_events(agenda):
+def _legacy_events(agenda, series_map=None):
     """Export public legacy (sans clé, déprécié) : tout l'historique,
     filtré côté client aux événements pas terminés."""
     uid = _resolve_uid(agenda)
@@ -345,7 +363,7 @@ def _legacy_events(agenda):
         last = datetime.date(*pairs[-1][1][:3])
         if last < today:
             continue  # terminé — l'export n'a pas de filtre serveur
-        out.append(_map_legacy(e))
+        out.append(_map_legacy(e, series_map))
     return out
 
 
@@ -355,16 +373,98 @@ def oa_list_events(cfg):
     Lève une exception si tout échoue (l'appelant retombe au site)."""
     agenda = (cfg.get("oa_agenda") or "leschampslibres").strip()
     key = (cfg.get("oa_api_key") or "").strip()
+    from .scrape import parse_series_map
+    series_map = parse_series_map(cfg.get("series_map", "")) or None
     if key:
         print("  source : OpenAgenda API v2")
-        return _v2_events(agenda, key)
+        return _v2_events(agenda, key, series_map)
     print("  source : export OpenAgenda (sans clé — endpoint déprécié)")
-    return _legacy_events(agenda)
+    return _legacy_events(agenda, series_map)
+
+
+def _norm(s):
+    """minuscules, sans accents ni séparateurs — pour croiser un slug
+    de page site (« nos-futurs-2027 ») et un keyword OA (« nosfuturs »)."""
+    import unicodedata
+    s = unicodedata.normalize("NFD", s or "")
+    return "".join(c for c in s
+                   if not unicodedata.combining(c) and c.isalnum()).lower()
+
+
+def detect_series(agenda="leschampslibres"):
+    """Détecte les séries éditoriales candidates dans les deux sources :
+    - keywords OA non techniques (export legacy, pas de clé requise)
+    - pages « série » (/au-programme/<slug>) liées depuis les pages
+      détail du site — le <h1> fournit le vrai libellé
+    Retourne une liste [(identifiant, libellé)] triée ; l'UI propose de
+    les ajouter au champ series_map (l'utilisateur trie/retouche)."""
+    from collections import Counter
+    from .scrape import BASE, get, list_events
+
+    out = {}   # identifiant → libellé
+
+    # — keywords OA — le legacy export est public et complet
+    kws = Counter()
+    try:
+        uid = _resolve_uid(agenda)
+        offset = 0
+        while True:
+            d = _get(f"https://openagenda.com/agendas/{uid}/events.json",
+                     params={"limit": 100, "offset": offset}).json()
+            for e in d.get("events", []):
+                for k in (e.get("keywords") or {}).get("fr") or []:
+                    if k and k not in ACCESS_KEYWORDS \
+                            and k != "accessibilite":
+                        kws[k] += 1
+            offset += len(d.get("events", [])) or 100
+            if not d.get("events") or offset >= d.get("total", 0):
+                break
+    except Exception as e:
+        print(f"  ! scan keywords OA KO : {e}")
+
+    # — pages série du site : liens éditoriaux dans les pages détail —
+    links = Counter()
+    try:
+        for e in list_events(max_pages=1):      # ~40 cartes, toutes catégories
+            try:
+                h = get(e["url"]).text
+            except Exception:
+                continue
+            for m in re.findall(r'href="(/au-programme/[^"?#]+)"', h):
+                if "/categorie/" in m or re.search(r"/\d+", m):
+                    continue  # liste catégorie ou événement, pas une série
+                links[m.rsplit("/", 1)[-1]] += 1
+    except Exception as e:
+        print(f"  ! scan pages série KO : {e}")
+
+    for slug in links:
+        # vrai libellé : <h1> de la page série (retombe sur le slug
+        # humanisé si la page ne répond pas)
+        label = re.sub(r"[-_]+", " ", slug).strip().capitalize()
+        try:
+            page = get(f"{BASE}/au-programme/{slug}").text
+            m = re.search(r"<h1[^>]*>(.*?)</h1>", page, re.S)
+            if m:
+                label = re.sub(r"<[^>]+>", "", m.group(1)).strip() or label
+        except Exception:
+            pass
+        out[slug] = label
+        # le keyword OA correspondant s'il existe (sous-chaîne
+        # normalisée) → même série, autre source
+        for k in list(kws):
+            if _norm(k) in _norm(slug) or _norm(slug) in _norm(k):
+                out.setdefault(k, label)
+                del kws[k]
+                break
+
+    for k in kws:   # keywords sans page série associée sur le site
+        out[k] = re.sub(r"[-_]+", " ", k).strip().capitalize()
+
+    return sorted(out.items(), key=lambda kv: kv[1].lower())
 
 
 def filter_categories(events, categories):
-    """Restreint aux slugs de catégories du site (gen_categories)."""
+    """Restreint aux slugs de catégories du site (gen_categories).
+    Sélection vide = aucune catégorie — même règle que le scraping."""
     wanted = {SLUG_TO_OA[s] for s in categories if s in SLUG_TO_OA}
-    if not wanted:
-        return events
     return [e for e in events if e.get("_oa_cat") in wanted]

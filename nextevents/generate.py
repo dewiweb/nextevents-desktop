@@ -9,7 +9,7 @@ from .media import download_image, ensure_fonts
 from .paths import OUT_DIR
 from .scrape import (
     DEFAULT_CATEGORIES, group_sessions, list_events, mark_series,
-    parse_detail,
+    parse_detail, parse_series_map,
 )
 from .oa import oa_list_events
 from .slide import (
@@ -119,6 +119,8 @@ def generate(out_dir=None, max_events=0, pages=99, cfg=None, size=DEFAULT_SIZE):
     cats = DEFAULT_CATEGORIES
     if cfg and "gen_categories" in cfg:
         cats = [c for c in cfg["gen_categories"].split(",") if c]
+    series_map = parse_series_map(
+        (cfg or {}).get("series_map", "")) or None
     use_oa = cfg and cfg.get("data_source") == "openagenda"
     if use_oa:
         try:
@@ -148,9 +150,10 @@ def generate(out_dir=None, max_events=0, pages=99, cfg=None, size=DEFAULT_SIZE):
             events = list(ex.map(download_image, events))
     else:
         with ThreadPoolExecutor(max_workers=6) as ex:
-            events = list(
-                ex.map(lambda e: download_image(parse_detail(e)), events))
-        mark_series(events)
+            events = list(ex.map(
+                lambda e: download_image(parse_detail(e, series_map)),
+                events))
+        mark_series(events, series_map)
 
     # métadonnées pour la « diapo du jour » de la webui
     import json

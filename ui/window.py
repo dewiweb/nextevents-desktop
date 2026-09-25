@@ -93,6 +93,7 @@ def _pw(ph):
 class MainWindow(QMainWindow):
     generate_done = Signal()  # émis dans le thread UI à la fin d'un run
     test_done = Signal(str, str)     # proto, résultat (thread worker)
+    series_done = Signal(list)       # détection des séries (worker)
     zip_done = Signal(str)           # message de fin d'export
     thumbs_ready = Signal(int, list) # génération, vignettes galerie
 
@@ -158,6 +159,7 @@ class MainWindow(QMainWindow):
         self._wire_dirty()
         self.generate_done.connect(self._after_generate)
         self.test_done.connect(self._on_test_done)
+        self.series_done.connect(self._on_series_done)
         self.zip_done.connect(
             lambda m: self.statusBar().showMessage(m, 6000))
         self.thumbs_ready.connect(self._fill_gallery)
@@ -278,6 +280,27 @@ class MainWindow(QMainWindow):
             grid.addWidget(cb, i // 2, i % 2)
         f.addRow(grid)
         lay.addWidget(catsbox)
+
+        sers = QGroupBox("Séries éditoriales — identifiant = Libellé "
+                         "[| logo.png] par ligne (slug de page du site "
+                         "ou mot-clé OpenAgenda)")
+        f = QFormLayout(sers)
+        self.series_map = QPlainTextEdit()
+        self.series_map.setMaximumHeight(72)
+        self.series_map.setPlaceholderText(
+            "grandstemoins = Les grands témoins | logo-gt.png")
+        f.addRow(self.series_map)
+        row = QHBoxLayout()
+        det = QPushButton("Détecter dans les sources")
+        det.setProperty("ghost", True)
+        det.setToolTip("Scanne les mots-clés OpenAgenda et les pages "
+                       "série du site, puis ajoute les candidats au champ")
+        det.clicked.connect(self._detect_series)
+        row.addWidget(det)
+        self.series_test = QLabel()
+        row.addWidget(self.series_test, 1)
+        f.addRow("", row)
+        lay.addWidget(sers)
 
         oa = QGroupBox("Source des événements")
         f = QFormLayout(oa)
@@ -568,6 +591,7 @@ class MainWindow(QMainWindow):
             close_to_tray=int(self.close_to_tray.isChecked()),
             oa_agenda=self.oa_agenda.text().strip(),
             data_source=self.data_source.currentData(),
+            series_map=self.series_map.toPlainText().strip(),
             start_minimized=int(self.start_min.isChecked()),
             autostart_slideshow=self.autostart_ss.currentData(),
             ss_delay=self.ss_delay.value(),
@@ -605,6 +629,9 @@ class MainWindow(QMainWindow):
                 w.dateChanged.connect(self._mark_dirty)
             for w in tab.findChildren(QComboBox):
                 w.currentIndexChanged.connect(self._mark_dirty)
+            for w in tab.findChildren(QPlainTextEdit):
+                if not w.isReadOnly():  # exclut le journal de génération
+                    w.textChanged.connect(self._mark_dirty)
             for w in tab.findChildren(QCheckBox):
                 w.toggled.connect(self._mark_dirty)
 
@@ -667,6 +694,7 @@ class MainWindow(QMainWindow):
         self.oa_agenda.setText(s.get("oa_agenda") or "leschampslibres")
         i = self.data_source.findData(s.get("data_source") or "site")
         self.data_source.setCurrentIndex(max(i, 0))
+        self.series_map.setPlainText(s.get("series_map") or "")
         self.oa_key.setPlaceholderText(
             "(enregistrée — vide = inchangé)" if s.get("oa_api_key")
             else "(non défini)")
@@ -804,6 +832,40 @@ class MainWindow(QMainWindow):
 
     def _on_test_done(self, proto, res):
         getattr(self, f"{proto}_test").setText(res)
+
+    def _detect_series(self):
+        """Scanne OA (keywords) et le site (pages série) en worker —
+        ajoute les candidats manquants au champ, sans rien écraser."""
+        self.series_test.setText("détection…")
+        s = load_settings()
+
+        def work():
+            try:
+                from nextevents.oa import detect_series
+                found = detect_series(s.get("oa_agenda") or
+                                      "leschampslibres")
+            except Exception as e:
+                found = [("__erreur__", str(e))]
+            self.series_done.emit(found)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_series_done(self, found):
+        if found and found[0][0] == "__erreur__":
+            self.series_test.setText(f"échec : {found[0][1]}")
+            return
+        existing = {l.split("=", 1)[0].strip() for l in
+                    self.series_map.toPlainText().splitlines()
+                    if "=" in l}
+        added = [f"{k} = {v}" for k, v in found if k not in existing]
+        if added:
+            cur = self.series_map.toPlainText().rstrip()
+            self.series_map.setPlainText(
+                (cur + "\n" if cur else "") + "\n".join(added))
+            self._mark_dirty()
+        self.series_test.setText(
+            f"{len(added)} série(s) ajoutée(s), "
+            f"{len(found) - len(added)} déjà listée(s)")
 
     def _browse(self, field):
         d = QFileDialog.getExistingDirectory(

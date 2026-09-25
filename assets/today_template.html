@@ -84,7 +84,7 @@ h1{font-size:80px;font-weight:500;line-height:1.08;letter-spacing:-.01em;
    rond marine, titre clair majuscule — composition centrée conservée */
 .gt-badge{flex:0 0 auto;align-self:flex-start;
  width:calc(250px*var(--k));height:calc(250px*var(--k));
- border-radius:50%;background:#3357a3;color:#fff;display:flex;
+ border-radius:50%;background:$accent;color:#141414;display:flex;
  flex-direction:column;align-items:center;justify-content:center;
  gap:calc(10px*var(--k));margin-bottom:calc(-185px*var(--k))}
 /* le rond de série (250px) est plus haut que la pastille .tag (~65px) :
@@ -93,15 +93,22 @@ h1{font-size:80px;font-weight:500;line-height:1.08;letter-spacing:-.01em;
 .gt-name{font-size:calc(36px*var(--k));font-weight:500;line-height:1.14;
  text-transform:uppercase;letter-spacing:.02em;
  padding:0 calc(26px*var(--k))}
-.gt-logo{color:rgba(255,255,255,.85);display:flex}
+.gt-logo{color:rgba(20,20,20,.75);display:flex}
 .gt-logo svg{height:calc(32px*var(--k));width:auto}
-.card.gt h1{color:#eef3fb;text-transform:uppercase}
-.card.gt .rule{background:#a8bce0}
-.card.gt .spk-label{color:#7f93b8}
-.card.gt .speaker .name{color:#a8bce0}
-.card.gt .speaker .qual{color:#7f93b8}
-.card.gt .mod{color:#8aa0c8;border-top-color:rgba(159,180,216,.25)}
-.card.gt .mod-line b{color:#c9d6ee}
+/* logo de série uploadé : remplace le rond GT — fond transparent,
+   l'image (idéalement PNG/SVG avec transparence) garde ses formes */
+.gt-badge--img{background:none}
+.gt-badge--img img{max-width:88%;max-height:88%;object-fit:contain}
+/* la variante série dérive du pastel $accent de la carte : le badge et
+   les tons secondaires suivent la nuance éditoriale de l'événement */
+.card.gt h1{color:$light;text-transform:uppercase}
+.card.gt .rule{background:$accent}
+.card.gt .spk-label{color:color-mix(in srgb,$accent 60%,$bg)}
+.card.gt .speaker .name{color:$accent}
+.card.gt .speaker .qual{color:color-mix(in srgb,$accent 55%,$bg)}
+.card.gt .mod{color:color-mix(in srgb,$accent 45%,$bg);
+ border-top-color:color-mix(in srgb,$accent 25%,transparent)}
+.card.gt .mod-line b{color:color-mix(in srgb,$accent 85%,$bg)}
 
 </style></head><body>
 <div class="card$variant">
