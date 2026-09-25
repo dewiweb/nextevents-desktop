@@ -129,14 +129,23 @@ def _date_spec(timings):
     span = (datetime.date(*last_e[:3]) - datetime.date(*first_b[:3])).days
 
     days = {t[0][:3] for t in timings}
-    if span > 300 and len(days) >= span * .5:
+    durs = sorted((datetime.datetime(*e) - datetime.datetime(*b))
+                  .total_seconds() // 60 for b, e in timings)
+    med = durs[len(durs) // 2]
+    # un timing = bloc d'ouverture de journée (≥ 4 h) → vraie expo
+    # permanente ; des séances courtes très nombreuses (animations
+    # planétarium : 1640 × 60 min sur 2 ans) sont programmées —
+    # « Prochaine séance » leur convient mieux
+    open_blocks = med >= 4 * 60
+    if span > 300 and open_blocks and len(days) >= span * .5:
         # collection/expo sur des années, ouverte quasiment tous les
         # jours → la carte site dit « Exposition permanente » ; le
         # compteur et la durée seraient absurdes. Un rendez-vous
         # récurrent sur l'année (rdv4c : ~14 % des jours) n'en est pas
         # une — il reste dans la branche récurrente ci-dessous.
         return "Exposition permanente", 0, "", None, None, False
-    contiguous = len(days) > 1 and span > 0 and len(days) >= span * .8
+    contiguous = (len(days) > 1 and span > 0 and len(days) >= span * .8
+                  and (open_blocks or span <= 120))
     if contiguous:
         # événement multi-jours (temps fort, expo temporaire) : même
         # remarque — le « Du … au … » suffit
@@ -185,7 +194,10 @@ def _base_map(e, cat_value, cat_label, public_label, kws, cond, timings,
 
     specs = {"Date": date_spec}
     if n_sessions > 1:
-        specs["Séances"] = f"{n_sessions} séances à venir"
+        # au-delà de ~30 le décompte n'a plus de sens sur une diapo
+        # (animations quotidiennes : « 1640 séances à venir »)
+        specs["Séances"] = ("Séances régulières" if n_sessions > 30
+                            else f"{n_sessions} séances à venir")
     if dur:
         specs["Durée"] = dur
     if lieu:
