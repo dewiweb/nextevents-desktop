@@ -134,6 +134,23 @@ badge ou logo custom). Génère `index.*` + `qr.*` dans `today/`,
 synchronisé comme le diaporama. Vignettes cliquables (aperçu
 agrandi) et suppression directe dans la colonne gauche.
 
+## Secrets
+
+Les identifiants (`ftp_pass`, `smb_pass`, `oa_api_key`) ne restent
+pas dans `settings.json` quand un meilleur support existe :
+
+1. **Variable d'environnement** `NEXTEVENTS_FTP_PASS`,
+   `NEXTEVENTS_SMB_PASS`, `NEXTEVENTS_OA_API_KEY` — prime toujours,
+   idéal pour un poste headless
+2. **Trousseau de l'OS** via `keyring` — Credential Manager sous
+   Windows, Secret Service (GNOME Keyring / KWallet) sous Linux ;
+   le champ de réglage affiche « enregistré dans le trousseau »
+3. **`settings.json`** en clair — dernier repli (Linux sans session
+   D-Bus) ; le placeholder signale alors « enregistré en clair »
+
+Les valeurs en clair d'une ancienne installation migrent vers le
+trousseau au premier enregistrement des réglages.
+
 ## Usage (utilisateur final)
 
 Lancer `nextevents.exe` / l'AppImage → fenêtre principale :

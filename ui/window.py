@@ -688,6 +688,20 @@ class MainWindow(QMainWindow):
         self.save_btn.style().unpolish(self.save_btn)
         self.save_btn.style().polish(self.save_btn)
 
+    @staticmethod
+    def _secret_ph(key, value):
+        """Placeholder d'un champ secret — indique où la valeur vit
+        (trousseau OS, variable d'env ou fichier en clair)."""
+        from nextevents import secrets
+        if not value:
+            return "(non défini)"
+        src = secrets.where(key)
+        if src == "env":
+            return f"(via {secrets.env_name(key)})"
+        return ("(enregistré dans le trousseau — vide = inchangé)"
+                if src == "keyring"
+                else "(enregistré en clair dans settings.json)")
+
     def _load(self):
         s = load_settings()
         self.interval.setValue(s["interval_hours"])
@@ -715,8 +729,7 @@ class MainWindow(QMainWindow):
         self.ftp_ls.setChecked(bool(s["ftp_send_landscape"]))
         self.ftp_pt.setChecked(bool(s["ftp_send_portrait"]))
         self.ftp_pass.setPlaceholderText(
-            "(enregistré — vide = inchangé)" if s["ftp_pass"]
-            else "(non défini)")
+            self._secret_ph("ftp_pass", s["ftp_pass"]))
         self.smb_host.setText(s["smb_host"])
         self.smb_share.setText(s["smb_share"])
         self.smb_path.setText(s["smb_path"])
@@ -724,8 +737,7 @@ class MainWindow(QMainWindow):
         self.smb_ls.setChecked(bool(s["smb_send_landscape"]))
         self.smb_pt.setChecked(bool(s["smb_send_portrait"]))
         self.smb_pass.setPlaceholderText(
-            "(enregistré — vide = inchangé)" if s["smb_pass"]
-            else "(non défini)")
+            self._secret_ph("smb_pass", s["smb_pass"]))
         self.out_dir.setText(s["out_dir"])
         self.local_dir.setText(s["local_dir"])
         self.oa_agenda.setText(s.get("oa_agenda") or "leschampslibres")
@@ -733,8 +745,7 @@ class MainWindow(QMainWindow):
         self.data_source.setCurrentIndex(max(i, 0))
         self.series_map.setPlainText(s.get("series_map") or "")
         self.oa_key.setPlaceholderText(
-            "(enregistrée — vide = inchangé)" if s.get("oa_api_key")
-            else "(non défini)")
+            self._secret_ph("oa_api_key", s.get("oa_api_key")))
         self.close_to_tray.setChecked(bool(s.get("close_to_tray", 1)))
         self.start_min.setChecked(bool(s.get("start_minimized", 0)))
         i = self.autostart_ss.findData(

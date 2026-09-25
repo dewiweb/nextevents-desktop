@@ -6,6 +6,7 @@ import threading
 from pathlib import Path
 
 from .paths import OUT_DIR as DEFAULT_OUT
+from . import secrets
 
 OUT_DIR = Path(os.environ.get("OUT_DIR", DEFAULT_OUT))
 SETTINGS_FILE = Path(os.environ.get("SETTINGS_FILE", OUT_DIR / "settings.json"))
@@ -89,6 +90,12 @@ def load_settings():
                 pass
         else:
             out[k] = str(v)
+    # secrets : env var puis trousseau OS priment sur le fichier ;
+    # la valeur en clair du JSON reste le dernier repli
+    for k in secrets.KEYS:
+        v = secrets.load(k)
+        if v is not None:
+            out[k] = v
     return out
 
 
@@ -106,6 +113,12 @@ def save_settings(s):
     d'écriture ne peut pas tronquer settings.json."""
     SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
     payload = dict(s)
+    # secrets → trousseau OS quand il existe ; le fichier ne garde
+    # alors que des chaînes vides (migration des anciens fichiers :
+    # la valeur en clair disparaît au premier enregistrement)
+    for k in secrets.KEYS:
+        if payload.get(k) and secrets.store(k, payload[k]):
+            payload[k] = ""
     if state["last_run"]:
         payload["last_run"] = state["last_run"]
     tmp = SETTINGS_FILE.with_name(SETTINGS_FILE.name + ".tmp")

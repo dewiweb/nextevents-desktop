@@ -4,7 +4,7 @@
 
 import sys
 
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, copy_metadata
 
 datas = [("assets", "assets"), ("nextevents.ico", "."),
          ("appimage/nextevents.png", ".")]
@@ -21,6 +21,13 @@ hiddenimports = [
 # "msedge" (le navigateur est celui du système, pas de téléchargement)
 tmp = collect_all("playwright")
 datas += tmp[0]
+binaries += tmp[1]
+hiddenimports += tmp[2]
+
+# keyring choisit son backend par entry points : métadonnées +
+# backends requis (Credential Manager Windows, Secret Service Linux)
+tmp = collect_all("keyring")
+datas += tmp[0] + copy_metadata("keyring")
 binaries += tmp[1]
 hiddenimports += tmp[2]
 
