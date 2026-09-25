@@ -127,6 +127,7 @@ class MainWindow(QMainWindow):
     zip_done = Signal(str)           # message de fin d'export
     thumbs_ready = Signal(int, list) # génération, vignettes galerie
     thumbs_append = Signal(list)     # diapos apparues en cours de run
+    regen_done = Signal(str, str)    # rel diapo + message de fin
 
     def __init__(self, tray_ok, icon_path):
         super().__init__()
@@ -194,6 +195,7 @@ class MainWindow(QMainWindow):
         self.zip_done.connect(
             lambda m: self.statusBar().showMessage(m, 6000))
         self.thumbs_ready.connect(self._fill_gallery)
+        self.regen_done.connect(self._regen_done)
         self.thumbs_append.connect(self._append_gallery)
 
         self._timer = QTimer(self, interval=500, timeout=self._poll)
@@ -1097,10 +1099,9 @@ class MainWindow(QMainWindow):
             it.setToolTip(path)
             self.gallery.addItem(it)
 
-    def _event_url(self, stem):
-        """Retrouve la fiche de l'événement (OA ou site) dans
-        events.json à partir du nom de la diapo — utile pour corriger
-        une erreur repérée sur la diapo."""
+    def _event_for(self, stem):
+        """Retrouve l'événement dans events.json à partir du nom de la
+        diapo (fiche OA/site, régénération à la demande)."""
         import json
         try:
             events = json.loads(
@@ -1112,8 +1113,71 @@ class MainWindow(QMainWindow):
             # collisions date+titre : slide_name suffixe « -N »
             if s == stem or (s and stem.startswith(s + "-")
                              and stem[len(s) + 1:].isdigit()):
-                return e.get("url")
+                return e
         return None
+
+    def _regen_slide(self, it):
+        """Re-rend une seule diapo depuis events.json (image servie par
+        le cache — pas de re-téléchargement si elle n'a pas changé)."""
+        from nextevents.slide import DEFAULT_SIZE, SIZES
+        rel = it.data(Qt.UserRole)
+        ev = self._event_for(Path(rel).stem)
+        if not ev:
+            self.statusBar().showMessage(
+                "Événement introuvable — régénérez tout d'abord", 4000)
+            return
+        if state["running"]:
+            self.statusBar().showMessage(
+                "Génération en cours — régénération impossible", 4000)
+            return
+        stem = Path(rel).stem
+        portrait = rel.startswith("portrait/")
+        size = SIZES.get(load_settings().get("resolution"), DEFAULT_SIZE)
+        self.statusBar().showMessage(f"Régénération de {stem}…")
+
+        def work():
+            try:
+                from nextevents.media import download_image, ensure_fonts
+                from nextevents.slide import render_all, slide_html
+                download_image(ev)
+                fonts = ensure_fonts()
+                dest = resolve_out_dir() / ("portrait" if portrait else "")
+                (dest / "html").mkdir(exist_ok=True)
+                hp = dest / "html" / f"{stem}.html"
+                hp.write_text(
+                    slide_html(ev, 0, fonts,
+                               "portrait" if portrait else "landscape"),
+                    encoding="utf-8")
+                # render_all est un générateur : il faut l'itérer
+                # pour que le rendu s'exécute
+                if not list(render_all(
+                        [(hp, dest / f"{stem}.png")], size)):
+                    raise RuntimeError("rendu vide")
+                self.regen_done.emit(rel, f"{stem} régénérée")
+            except Exception as e:
+                self.regen_done.emit("", f"Régénération KO : {e}")
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _regen_done(self, rel, msg):
+        """Fin de régénération : recharge la vignette concernée."""
+        self.statusBar().showMessage(msg, 5000)
+        if not rel:
+            return
+        for i in range(self.gallery.count()):
+            it = self.gallery.item(i)
+            if it.data(Qt.UserRole) == rel:
+                # même décodage réduit que les vignettes du worker
+                from PySide6.QtGui import QImageReader
+                r = QImageReader(str(resolve_out_dir() / rel))
+                sz = r.size()
+                if sz.isValid():
+                    sz.scale(280, 160, Qt.KeepAspectRatio)
+                    r.setScaledSize(sz)
+                img = r.read()
+                if not img.isNull():
+                    it.setIcon(QPixmap.fromImage(img))
+                break
 
     def _gallery_menu(self, pos):
         """Menu contextuel de la galerie : aperçu / fiche / suppression."""
@@ -1123,7 +1187,11 @@ class MainWindow(QMainWindow):
         if it and it.data(Qt.UserRole):
             m.addAction("Aperçu").triggered.connect(
                 lambda: self._preview_slide(it))
-            url = self._event_url(Path(it.data(Qt.UserRole)).stem)
+            ev = self._event_for(Path(it.data(Qt.UserRole)).stem)
+            if ev:
+                m.addAction("Régénérer cette diapo").triggered.connect(
+                    lambda: self._regen_slide(it))
+            url = (ev or {}).get("url")
             if url:
                 m.addAction("Ouvrir la fiche de l'événement").triggered\
                     .connect(lambda: QDesktopServices.openUrl(QUrl(url)))

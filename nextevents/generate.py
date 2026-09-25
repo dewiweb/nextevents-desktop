@@ -164,6 +164,7 @@ def generate(out_dir=None, max_events=0, pages=99, cfg=None, size=DEFAULT_SIZE):
                 {
                     "title": e["title"], "url": e["url"],
                     "slide": slide_name(e, i),
+                    "image": e.get("image") or e.get("card_img"),
                     "tag": e.get("tag"), "color": e.get("color"),
                     "specs": e["specs"],
                     "desc": e.get("desc", ""),
