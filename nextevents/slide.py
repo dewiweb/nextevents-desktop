@@ -86,6 +86,20 @@ def icon_svg(name):
     )
 
 
+def _md_inline(text):
+    """Markdown-lite → HTML inline pour le rendu : échappé d'abord,
+    puis **gras** → <b>, *italique* → <em>, [lien](url) → libellé
+    souligné, «## titre» → <b>. Tronquer AVANT (jamais au milieu
+    d'une balise)."""
+    t = html.escape(text)
+    t = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", t)
+    t = re.sub(r"__(.+?)__", r"<b>\1</b>", t)
+    t = re.sub(r"(?<!\w)\*(.+?)\*(?!\w)", r"<em>\1</em>", t)
+    t = re.sub(r"\[(.+?)\]\([^)]*\)", r"<u>\1</u>", t)
+    t = re.sub(r"^#+\s*(.+?)$", r"<b>\1</b>", t, flags=re.M)
+    return t.replace("\n", "<br>")
+
+
 def truncate(text, limit=400):
     if len(text) <= limit:
         return text
@@ -150,7 +164,10 @@ def slide_html(ev, idx, fonts, orientation="landscape"):
         tag=html.escape(tag),
         h1_size=h1_size,
         title=html.escape(ev["title"]),
-        desc=html.escape(truncate(ev.get("desc", ""))),
+        # desc_md : markdown interprété (gras/italique) ; desc plat en
+        # repli (chemin site — pas de markdown de toute façon)
+        desc=_md_inline(truncate(ev.get("desc_md")
+                                 or ev.get("desc", ""))),
         specs_cls=specs_cls,
         specs_html=specs_html,
         logo_mark=asset_svg("logo-mark.svg"),

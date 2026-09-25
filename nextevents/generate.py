@@ -170,6 +170,7 @@ def generate(out_dir=None, max_events=0, pages=99, cfg=None, size=DEFAULT_SIZE):
                     "specs": e["specs"],
                     "desc": e.get("desc", ""),
                     "desc_long": e.get("desc_long", ""),
+                    "desc_md": e.get("desc_md", ""),
                     "credit": e.get("credit", ""),
                     "speakers": e.get("speakers", []),
                     "moderator": e.get("moderator", ""),

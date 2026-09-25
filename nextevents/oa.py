@@ -73,19 +73,23 @@ PUBLIC_LABEL = {"Tous publics": "Tout public"}  # wording du site
 
 # ———————————————————— formatage ————————————————————
 
-def _clean_md(text):
-    """OA sert les descriptions en markdown-lite — on enlève les
-    marqueurs pour le rendu texte des diapos."""
+def _norm_ws(text):
+    """Espaces invisibles OA (zero-width, insécable) → espace normal,
+    sinon « 15h00Où » quand le saut de ligne markdown est réduit.
+    Conserve les marqueurs markdown — version destinée au rendu HTML."""
     if not text:
         return ""
+    return text.replace("​", " ").replace(" ", " ").strip()
+
+
+def _clean_md(text):
+    """Markdown-lite OA → texte plat (extraction, specs, UI)."""
+    text = _norm_ws(text)
     text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)   # **gras**
     text = re.sub(r"__(.+?)__", r"\1", text)       # __gras__
     text = re.sub(r"(?<!\w)\*(.+?)\*(?!\w)", r"\1", text)  # *ital*
     text = re.sub(r"\[(.+?)\]\([^)]*\)", r"\1", text)      # [lien](url)
     text = re.sub(r"^#+\s*", "", text, flags=re.M)         # ## titre
-    # espaces invisibles OA (zero-width, insécable) → espace normal,
-    # sinon « 15h00Où » quand le saut de ligne markdown est réduit
-    text = text.replace("​", " ").replace(" ", " ")
     return text.strip()
 
 
@@ -213,6 +217,7 @@ def _base_map(e, cat_value, cat_label, public_label, kws, cond, timings,
     tag = OA_TAG_LABEL.get(cat_value, cat_label or "Événement")
     if tag == "Temps fort":
         specs.pop("Lieu", None)  # multi-sites : le lieu prête à confusion
+    desc_md = _norm_ws(desc) or _norm_ws(desc_long)
     desc, desc_long = _clean_md(desc), _clean_md(desc_long)
 
     # intervenants / animateur / notes : même heuristiques que le site
@@ -238,6 +243,9 @@ def _base_map(e, cat_value, cat_label, public_label, kws, cond, timings,
     return {
         "title": title, "url": url, "tag": tag, "color": None,
         "specs": specs, "desc": desc, "desc_long": desc_long,
+        # markdown conservé : le rendu l'interprète (gras/italique),
+        # les champs plats restent pour l'extraction et l'UI
+        "desc_md": desc_md,
         "speakers": speakers, "moderator": moderator, "note": note,
         "audience": public_label or "", "access": access,
         "access_venue": [VENUE_ACCESS[c] for c in access_codes
