@@ -19,9 +19,12 @@ Tout est local — aucun serveur web, aucun navigateur externe :
   FTP/SMB/local, planificateur, diapo du jour)
 - **`ui/`** — interface native **PySide6/Qt Widgets** : fenêtre à onglets
   (Général, Destinations, Diapo du jour, Diaporama), galerie de vignettes
-  avec aperçu intégré, journal en direct, barre de progression globale,
+  avec aperçu intégré — alimentée **au fil de la génération** (décodage
+  en worker thread), journal en direct, barre de progression globale,
   raccourcis (`Ctrl+G` générer, `Ctrl+S` enregistrer, `F11` diaporama,
-  `F5` galerie), indicateur de réglages modifiés
+  `F5` galerie), indicateur de réglages modifiés. Garde-fou molette :
+  les combos/spin non focalisés ignorent la roulette (elle scrolle la
+  page) — `WheelGuard` installé au niveau `QApplication`
 - **`ui/slideshow.py`** — player plein écran natif (fondu/glissement,
   pause au clic, rechargement auto des diapos et réglages) — remplace
   l'ancien slideshow HTML/JS
@@ -41,6 +44,95 @@ Divergence assumée avec l'upstream : `assets/today_template.html`
 embarque un auto-fit (`--k`) qui réduit proportionnellement toute la
 mise en page quand le contenu déborde (longues qualifications
 d'intervenants) — à reverser upstream si souhaité.
+
+## Sources d'événements
+
+Réglage « Source » dans l'onglet Général — deux chemins avec repli
+automatique :
+
+1. **OpenAgenda v2** (clé API renseignée) : `timings[gte]` filtré
+   côté serveur, schéma de l'agenda pour décoder catégories/publics,
+   fetch du détail quand la liste omet les `timings` (événements à
+   très nombreuses séances, ex. rdv4c)
+2. **Export legacy** `events.json` (sans clé, endpoint déprécié) :
+   historique complet, filtrage des terminés côté client
+3. **Scraping du site** leschampslibres.fr : repli si OA est KO, et
+   seule source de la couleur éditoriale des cartes
+
+Les événements des deux sources convergent vers le même format
+interne — le rendu, le filtrage et la diapo du jour sont identiques.
+
+### Catégories et limiteur
+
+- **Catégories** : cases à cocher par catégorie du programme (les 10
+  slugs du site) ; la sélection vide = aucun événement. Côté OA, le
+  filtrage mappe les catégories OA (`_oa_cat`) sur les slugs site.
+- **Limiteur** (réglage « Affichage ») : trois modes —
+  `Nombre max` (historique), `Dans les N jours`, `Jusqu'au <date>`.
+  Un événement est gardé si sa fenêtre [début, fin] intersecte
+  [aujourd'hui, horizon] — les expos en cours restent donc visibles.
+
+## Specs affichées sur les diapos
+
+Ordre fixe `SPEC_ORDER`, chaque ligne absente est omise :
+
+| Spec | Contenu / règles |
+|---|---|
+| **Date** | `JJ/MM/AA à HHh` (séance unique) · `Du … au …` (multi-jours) · `Prochaine séance : …` (récurrent, > 1 séance à venir) · `Exposition permanente` |
+| **Séances** | `N séances à venir` (≤ 30) · `Séances régulières` (> 30 — le décompte n'a plus de sens, ex. animations quotidiennes) |
+| **Durée** | `1h30` — masquée si ≥ 4 h (plage d'ouverture, pas une séance) |
+| **Lieu** | omis pour les « Temps fort » multi-sites |
+| **Tarif** | texte OA `conditions` ou carte site |
+| **Public** | `Familles · dès 8 ans` (schéma OA `publics` + `age.min`) |
+| **Accessibilité** | keywords OA `def*` ∪ mentions dans le texte |
+
+### Classification date (OA)
+
+La durée **médiane** des timings tranche le type d'événement :
+
+- timings = plages d'ouverture (médiane ≥ 4 h) sur > 300 j et ≥ 50 %
+  des jours → **Exposition permanente** (pas de compteur ni durée)
+- séances courtes très nombreuses (Merlin : 1640 × 1 h) → récurrent,
+  « Prochaine séance » + « Séances régulières »
+- jours contigus (≥ 80 % du span, expo temporaire/temps fort) →
+  « Du … au … », épinglé en tête tant qu'il est en cours
+- sinon → séance unique ou récurrente classique
+
+Le site éclate chaque séance en carte : `group_sessions` les
+refusionne par titre — même sémantique « Prochaine séance ».
+
+## Séries éditoriales
+
+Réglage « Séries éditoriales » (Général) — une ligne par série :
+
+```
+identifiant = Libellé | chemin/logo-optionnel
+```
+
+- L'identifiant matche **aussi bien** un slug de page série du site
+  (`les-grands-temoins`) qu'un keyword OA (`grandstemoins`)
+- Bouton **« Détecter dans les sources »** : scanne les keywords OA
+  (export legacy) + les liens série des pages détail du site, croise
+  par normalisation (accents/casse), récupère les vrais libellés dans
+  les `<h1>` des pages série — pré-remplit le champ sans écraser
+- `| logo.png` optionnel : remplace le badge circulaire générique —
+  chemin absolu ou relatif au dossier `data/`
+- Les keywords non-série (`vacances`, `fetedelascience`…) sont
+  conservés dans `events.json` — base d'un futur filtre thématique
+- L'URL du QR de la diapo du jour est résolue en testant les
+  identifiants de la série (le premier slug site qui répond gagne)
+
+## Diapo du jour
+
+Onglet dédié : sélection d'un événement, intervenants/animatrice
+éditable, notes, accessibilité (événement + lieu), fond (pastels +
+image), **accent** (auto = couleur éditoriale de la carte, ou
+pastel choisi — pilote badge, filet, tons `color-mix` dérivés).
+
+Série détectée → variante « série » (fond marine, titre majuscules,
+badge ou logo custom). Génère `index.*` + `qr.*` dans `today/`,
+synchronisé comme le diaporama. Vignettes cliquables (aperçu
+agrandi) et suppression directe dans la colonne gauche.
 
 ## Usage (utilisateur final)
 
