@@ -83,6 +83,9 @@ def _clean_md(text):
     text = re.sub(r"(?<!\w)\*(.+?)\*(?!\w)", r"\1", text)  # *ital*
     text = re.sub(r"\[(.+?)\]\([^)]*\)", r"\1", text)      # [lien](url)
     text = re.sub(r"^#+\s*", "", text, flags=re.M)         # ## titre
+    # espaces invisibles OA (zero-width, insécable) → espace normal,
+    # sinon « 15h00Où » quand le saut de ligne markdown est réduit
+    text = text.replace("​", " ").replace(" ", " ")
     return text.strip()
 
 
@@ -125,12 +128,14 @@ def _date_spec(timings):
     last_e = timings[-1][1]
     span = (datetime.date(*last_e[:3]) - datetime.date(*first_b[:3])).days
 
-    if span > 300:
-        # collection/expo sur des années → la carte site dit
-        # « Exposition permanente » ; un timing par jour d'ouverture,
-        # le compteur et la durée seraient absurdes
-        return "Exposition permanente", 0, "", None, None, False
     days = {t[0][:3] for t in timings}
+    if span > 300 and len(days) >= span * .5:
+        # collection/expo sur des années, ouverte quasiment tous les
+        # jours → la carte site dit « Exposition permanente » ; le
+        # compteur et la durée seraient absurdes. Un rendez-vous
+        # récurrent sur l'année (rdv4c : ~14 % des jours) n'en est pas
+        # une — il reste dans la branche récurrente ci-dessous.
+        return "Exposition permanente", 0, "", None, None, False
     contiguous = len(days) > 1 and span > 0 and len(days) >= span * .8
     if contiguous:
         # événement multi-jours (temps fort, expo temporaire) : même
@@ -256,7 +261,7 @@ def _map_v2(e, cat_opts, pub_opts, agenda, series_map=None):
     url = (e.get("canonicalUrl")
            or (f"https://openagenda.com/{agenda}/events/"
                f"{uid}_{e.get('slug', '')}" if uid else ""))
-    return _base_map(
+    ev = _base_map(
         e, cat_value, cat_label, " · ".join(pubs), kws, cond,
         e.get("timings"), (e.get("title") or {}).get("fr", ""), url,
         (e.get("description") or {}).get("fr", ""),
@@ -266,6 +271,16 @@ def _map_v2(e, cat_opts, pub_opts, agenda, series_map=None):
         image, e.get("imageCredits") or "",
         (e.get("location") or {}).get("name", ""),
         acc_codes, e.get("age"), series_map)
+    if not e.get("timings"):
+        # timings indisponibles même sur le détail : le texte
+        # « dateRange » éditorial (« 4 septembre 2026 - 2 juillet
+        # 2027, certains vendredis ») vaut mieux que « permanente »
+        dr = (e.get("dateRange") or {}).get("fr", "")
+        dr = re.sub(r"\s*undefined\s*", " ", dr).strip(" ,")
+        if dr:
+            ev["specs"]["Date"] = dr
+            ev["specs"].pop("Séances", None)
+    return ev
 
 
 def _map_legacy(e, series_map=None):
@@ -339,6 +354,19 @@ def _v2_events(agenda, key, series_map=None):
         offset += len(d.get("events", [])) or 100
         if not d.get("events") or offset >= total:
             break
+    # la liste omet `timings` quand il y en a trop (clubs récurrents
+    # type rdv4c : ~40/an) — sans eux l'événement serait classé
+    # « Exposition permanente » ; on va les chercher sur le détail
+    for e in events:
+        if not e.get("timings") and e.get("firstTiming"):
+            try:
+                d = _get(f"{API}/agendas/{agenda}/events/{e['uid']}",
+                         params={"key": key}).json()
+                full = d.get("event", d)
+                if full.get("timings"):
+                    e["timings"] = full["timings"]
+            except Exception:
+                pass  # le texte dateRange servira de spécification
     return [_map_v2(e, cat_opts, pub_opts, agenda, series_map)
             for e in events]
 
