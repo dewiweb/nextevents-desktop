@@ -163,6 +163,7 @@ def generate(out_dir=None, max_events=0, pages=99, cfg=None, size=DEFAULT_SIZE):
             [
                 {
                     "title": e["title"], "url": e["url"],
+                    "slide": slide_name(e, i),
                     "tag": e.get("tag"), "color": e.get("color"),
                     "specs": e["specs"],
                     "desc": e.get("desc", ""),
@@ -175,7 +176,7 @@ def generate(out_dir=None, max_events=0, pages=99, cfg=None, size=DEFAULT_SIZE):
                     "access_venue": e.get("access_venue", []),
                     "series": e.get("series", ""),
                 }
-                for e in events
+                for i, e in enumerate(events, start=1)
             ],
             ensure_ascii=False, indent=1,
         ),

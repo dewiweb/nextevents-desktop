@@ -9,9 +9,12 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QDate, QEvent, QObject, QTimer, Signal
+from PySide6.QtCore import (
+    Qt, QDate, QEvent, QObject, QTimer, QUrl, Signal,
+)
 from PySide6.QtGui import (
-    QIcon, QKeySequence, QPixmap, QShortcut, QWheelEvent,
+    QDesktopServices, QIcon, QKeySequence, QPixmap, QShortcut,
+    QWheelEvent,
 )
 from PySide6.QtWidgets import (
     QAbstractScrollArea, QAbstractSpinBox, QApplication, QCheckBox,
@@ -1094,14 +1097,36 @@ class MainWindow(QMainWindow):
             it.setToolTip(path)
             self.gallery.addItem(it)
 
+    def _event_url(self, stem):
+        """Retrouve la fiche de l'événement (OA ou site) dans
+        events.json à partir du nom de la diapo — utile pour corriger
+        une erreur repérée sur la diapo."""
+        import json
+        try:
+            events = json.loads(
+                (resolve_out_dir() / "events.json").read_text("utf-8"))
+        except Exception:
+            return None
+        for e in events:
+            s = e.get("slide")
+            # collisions date+titre : slide_name suffixe « -N »
+            if s == stem or (s and stem.startswith(s + "-")
+                             and stem[len(s) + 1:].isdigit()):
+                return e.get("url")
+        return None
+
     def _gallery_menu(self, pos):
-        """Menu contextuel de la galerie : aperçu / suppression."""
+        """Menu contextuel de la galerie : aperçu / fiche / suppression."""
         from PySide6.QtWidgets import QMenu
         it = self.gallery.itemAt(pos)
         m = QMenu(self)
         if it and it.data(Qt.UserRole):
             m.addAction("Aperçu").triggered.connect(
                 lambda: self._preview_slide(it))
+            url = self._event_url(Path(it.data(Qt.UserRole)).stem)
+            if url:
+                m.addAction("Ouvrir la fiche de l'événement").triggered\
+                    .connect(lambda: QDesktopServices.openUrl(QUrl(url)))
         if self.gallery.selectedItems():
             m.addAction("Supprimer la sélection…").triggered.connect(
                 self._delete_selected)
