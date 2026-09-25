@@ -84,7 +84,7 @@ h1{font-size:80px;font-weight:500;line-height:1.08;letter-spacing:-.01em;
    rond marine, titre clair majuscule — composition centrée conservée */
 .gt-badge{flex:0 0 auto;align-self:flex-start;
  width:calc(250px*var(--k));height:calc(250px*var(--k));
- border-radius:50%;background:$accent;color:#141414;display:flex;
+ border-radius:50%;background:#3357a3;color:$accent;display:flex;
  flex-direction:column;align-items:center;justify-content:center;
  gap:calc(10px*var(--k));margin-bottom:calc(-185px*var(--k))}
 /* le rond de série (250px) est plus haut que la pastille .tag (~65px) :
@@ -92,8 +92,9 @@ h1{font-size:80px;font-weight:500;line-height:1.08;letter-spacing:-.01em;
    autres diapos — le cercle déborde visuellement dans la zone vide */
 .gt-name{font-size:calc(36px*var(--k));font-weight:500;line-height:1.14;
  text-transform:uppercase;letter-spacing:.02em;
- padding:0 calc(26px*var(--k))}
-.gt-logo{color:rgba(20,20,20,.75);display:flex}
+ padding:0 calc(26px*var(--k));max-width:100%;text-align:center;
+ overflow-wrap:anywhere}
+.gt-logo{color:$accent;opacity:.8;display:flex}
 .gt-logo svg{height:calc(32px*var(--k));width:auto}
 /* logo de série uploadé : remplace le rond GT — fond transparent,
    l'image (idéalement PNG/SVG avec transparence) garde ses formes */

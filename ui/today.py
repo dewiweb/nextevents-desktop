@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from nextevents.settings import load_settings, resolve_out_dir
-from nextevents.scrape import series_logo
+from nextevents.scrape import series_brand
 from nextevents.slide import SIZES, DEFAULT_SIZE
 
 BG_CHOICES = [
@@ -305,7 +305,9 @@ class TodayTab(QWidget):
         if i is None or i < 0 or i >= len(self._events):
             return
         e = self._events[i]
-        series = e.get("series") or ""
+        smap = (load_settings() or {}).get("series_map", "")
+        label, _ = series_brand(smap, e.get("series") or "")
+        series = label or e.get("series") or ""
         self.series_lbl.setText(
             f"Série : {series} — modèle com appliqué" if series else "")
         if series:
@@ -333,20 +335,24 @@ class TodayTab(QWidget):
         i = self.ev.currentData()
         e = self._events[i] if i is not None and 0 <= i < len(
             self._events) else {}
+        smap = (load_settings() or {}).get("series_map", "")
+        label, logo = series_brand(smap, e.get("series") or "")
+        series = label or e.get("series") or ""
+        # série : le bleu pâle de la palette reprend le rond bleu du
+        # modèle com (accent auto = couleur de carte sinon)
+        accent = self.accent or ("#e2dff0" if series else None)
         return {
             "title": self.title.text().strip(),
             "tag": e.get("tag") or "",
             "color": e.get("color") or None,
-            "accent": self.accent,
+            "accent": accent,
             "bg": self.bg,
             "speakers": self._speakers(),
             "moderator": self.moderator.text().strip(),
             "note": self.note.toPlainText().strip(),
             "access": self.access.toPlainText().strip(),
-            "series": e.get("series") or "",
-            "series_logo": series_logo(
-                (load_settings() or {}).get("series_map", ""),
-                e.get("series") or ""),
+            "series": series,
+            "series_logo": logo,
         }
 
     def _generate(self):

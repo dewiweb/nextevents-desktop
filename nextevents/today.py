@@ -21,10 +21,17 @@ _TEMPLATE_QR = None
 
 def _file_uri(path_str):
     """Fichier image → data URI. Les chemins relatifs sont résolus
-    depuis le dossier de données (à côté du diaporama généré)."""
+    depuis le dossier parent de la sortie configurée, puis depuis le
+    dossier de données de l'app (repli pour les configs antérieures)."""
     p = Path(path_str).expanduser()
     if not p.is_absolute():
-        p = resolve_out_dir().parent / p
+        for base in (resolve_out_dir().parent, OUT_DIR.parent):
+            cand = base / p
+            if cand.is_file():
+                p = cand
+                break
+        else:
+            p = resolve_out_dir().parent / p
     if not p.is_file():
         return None
     mime = {".png": "image/png", ".svg": "image/svg+xml",

@@ -78,6 +78,37 @@ def series_logo(text, label):
     return next((g for _, l, g in parse_series(text)
                  if l == label and g), None)
 
+
+def _norm_series(s):
+    """minuscules, sans accents ni séparateurs — tolère « Grandstemoins »
+    vs « grandstemoins » ou « Les grands témoins »."""
+    import unicodedata
+    s = unicodedata.normalize("NFD", s or "")
+    return "".join(c for c in s
+                   if not unicodedata.combining(c) and c.isalnum()).lower()
+
+
+def series_brand(text, series):
+    """Résout (libellé canonique, logo) pour une série détectée — events.json
+    peut contenir un libellé d'une ancienne config ou le keyword brut
+    (« Grandstemoins ») : on matche clé et libellé de series_map
+    (normalisés), puis les tableaux par défaut site/OA. Renvoie
+    (None, None) si la série n'est dans aucun tableau — l'appelant garde
+    alors la valeur brute."""
+    s = _norm_series(series)
+    if not s:
+        return "", None
+    from .oa import SERIES_KEYWORDS
+    tables = [parse_series(text),
+              [(k, l, None) for k, l in SERIES.items()],
+              [(k, l, None) for k, l in SERIES_KEYWORDS.items()]]
+    for rows in tables:
+        for k, l, g in rows:
+            nk, nl = _norm_series(k), _norm_series(l)
+            if s == nl or s == nk or s in nk or nk in s:
+                return l, g
+    return None, None
+
 SPEC_ICONS = {"Date": "calendar", "Séances": "calendar", "Durée": "timer",
               "Lieu": "pin", "Tarif": "ticket", "Public": "group",
               "Accessibilité": "accessibility"}
