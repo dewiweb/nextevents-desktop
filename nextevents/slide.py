@@ -184,9 +184,17 @@ def render_png_firefox(html_path, png_path, size=DEFAULT_SIZE):
         raise RuntimeError(f"firefox screenshot KO : {r.stderr.decode()[:400]}")
     img = Image.open(tmp_out).convert("RGB")
     img = img.resize(size) if img.size != size else img
-    img.save(png_path, "PNG")
+    _save_atomic(img, png_path)
     tmp_out.unlink()
     zoomed.unlink()
+
+
+def _save_atomic(img, path):
+    """PNG écrit via fichier temporaire + rename : le diaporama ou la
+    galerie ne peuvent pas lire un fichier à moitié écrit."""
+    tmp = path.with_name(path.name + ".tmp")
+    img.save(tmp, "PNG")
+    os.replace(tmp, path)
 
 
 def render_all(slides, size=DEFAULT_SIZE):
@@ -245,7 +253,7 @@ def render_all(slides, size=DEFAULT_SIZE):
                 img = Image.open(io.BytesIO(shot)).convert("RGB")
                 if img.size != size:
                     img = img.resize(size, Image.LANCZOS)
-                img.save(pp, "PNG")
+                _save_atomic(img, pp)
                 yield pp
             except Exception as e:
                 print(f"  ✗ {pp.name} : {e}")

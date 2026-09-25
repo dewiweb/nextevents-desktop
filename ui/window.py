@@ -126,7 +126,7 @@ class MainWindow(QMainWindow):
     series_done = Signal(list)       # détection des séries (worker)
     zip_done = Signal(str)           # message de fin d'export
     thumbs_ready = Signal(int, list) # génération, vignettes galerie
-    thumbs_append = Signal(list)     # diapos apparues en cours de run
+    thumbs_append = Signal(list, set)  # vignettes + rels décodés (worker)
     regen_done = Signal(str, str)    # rel diapo + message de fin
 
     def __init__(self, tray_ok, icon_path):
@@ -142,6 +142,9 @@ class MainWindow(QMainWindow):
         self._sched_interval = 0
         self._io_tick = 0
         self._gal_gen = 0
+        self._gal_seen = set()
+        self._gal_pending = set()
+        self._was_running = False
         self._dirty = False
 
         central = QWidget()
@@ -698,7 +701,7 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         self.res.setCurrentIndex(
-            self.res.findData(s["resolution"]))
+            max(0, self.res.findData(s["resolution"])))
         self.gen_ls.setChecked(bool(s["gen_landscape"]))
         self.gen_pt.setChecked(bool(s["gen_portrait"]))
         enabled = set((s.get("gen_categories") or "").split(","))
@@ -739,11 +742,11 @@ class MainWindow(QMainWindow):
         self.autostart_ss.setCurrentIndex(max(i, 0))
         self.ss_delay.setValue(s["ss_delay"] or 8)
         self.ss_transition.setCurrentIndex(
-            self.ss_transition.findData(s["ss_transition"]))
+            max(0, self.ss_transition.findData(s["ss_transition"])))
         self.ss_tdur.setValue(s["ss_tdur"] or 1500)
         self.ss_delay_p.setValue(s["ss_delay_p"] or 8)
         self.ss_transition_p.setCurrentIndex(
-            self.ss_transition_p.findData(s["ss_transition_p"]))
+            max(0, self.ss_transition_p.findData(s["ss_transition_p"])))
         self.ss_tdur_p.setValue(s["ss_tdur_p"] or 1500)
         self._refresh_gallery()
 
@@ -779,7 +782,7 @@ class MainWindow(QMainWindow):
             sb = self.log.verticalScrollBar()
             sb.setValue(sb.maximum())
         # statut
-        was = getattr(self, "_was_running", False)
+        was = self._was_running
         running = state["running"]
         self._was_running = running
         if was and not running:
@@ -972,8 +975,18 @@ class MainWindow(QMainWindow):
         if not rel:
             return
         p = resolve_out_dir() / rel
-        pix = QPixmap(str(p))
-        if pix.isNull():
+        scr = self.screen().availableGeometry()
+        # décodage direct à la taille d'affichage : un PNG UHD complet
+        # prendrait ~150 ms sur le thread GUI
+        from PySide6.QtGui import QImageReader
+        r = QImageReader(str(p))
+        sz = r.size()
+        if sz.isValid():
+            sz.scale(scr.width() * 3 // 4, scr.height() * 3 // 4,
+                     Qt.KeepAspectRatio)
+            r.setScaledSize(sz)
+        img = r.read()
+        if img.isNull():
             return
         d = QDialog(self)
         d.setAttribute(Qt.WA_DeleteOnClose)
@@ -981,11 +994,7 @@ class MainWindow(QMainWindow):
         v = QVBoxLayout(d)
         v.setContentsMargins(0, 0, 0, 0)
         lbl = QLabel()
-        scr = self.screen().availableGeometry()
-        lbl.setPixmap(pix.scaled(scr.width() * 3 // 4,
-                                 scr.height() * 3 // 4,
-                                 Qt.KeepAspectRatio,
-                                 Qt.SmoothTransformation))
+        lbl.setPixmap(QPixmap.fromImage(img))
         v.addWidget(lbl)
         d.exec()
 
@@ -1050,24 +1059,27 @@ class MainWindow(QMainWindow):
         """Ajoute à la galerie les PNG apparus depuis le dernier
         passage — les diapos deviennent visibles pendant la génération
         au lieu d'attendre la fin du run."""
-        seen = getattr(self, "_gal_seen", None)
-        if seen is None:
-            return  # premier remplissage pas encore fait
         d = resolve_out_dir()
         new = []
         for sub, names in (("", slides()),
                            ("portrait", slides_portrait())):
             base = d / sub if sub else d
             new += [base / n for n in names]
-        new = [p for p in new if str(p.relative_to(d)) not in seen]
+        new = [p for p in new
+               if (rel := str(p.relative_to(d))) not in self._gal_seen
+               and rel not in self._gal_pending]
         if not new:
             return
-        seen.update(str(p.relative_to(d)) for p in new)
+        # « pending » évite les décodages en double tant que le worker
+        # tourne ; « seen » n'est posé qu'au décodage réussi, sinon le
+        # fichier est retenté au prochain passage
+        self._gal_pending.update(str(p.relative_to(d)) for p in new)
 
         def work():
             from PySide6.QtGui import QImageReader
             items = []
             for p in new:
+                rel = str(p.relative_to(d))
                 r = QImageReader(str(p))
                 sz = r.size()
                 if sz.isValid():
@@ -1075,17 +1087,23 @@ class MainWindow(QMainWindow):
                     r.setScaledSize(sz)
                 img = r.read()
                 if img.isNull():
+                    items.append((rel, None, None, None))
                     continue
-                rel = str(p.relative_to(d))
                 label = p.name.removeprefix("slide-").removesuffix(".png")
                 if p.parent.name == "portrait":
                     label += "  ▯"
                 items.append((rel, label, img, str(p)))
-            self.thumbs_append.emit(items)
+            self.thumbs_append.emit(
+                items, {str(p.relative_to(d)) for p in new})
 
         threading.Thread(target=work, daemon=True).start()
 
-    def _append_gallery(self, items):
+    def _append_gallery(self, items, decoded):
+        self._gal_pending -= decoded
+        # un refresh complet a pu afficher ces fichiers entre-temps
+        items = [t for t in items if t[2] is not None
+                 and t[0] not in self._gal_seen]
+        self._gal_seen.update(t[0] for t in items)
         if not items:
             return
         # retire le placeholder « aucune diapo » s'il est encore là

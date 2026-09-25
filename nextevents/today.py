@@ -12,7 +12,7 @@ from string import Template
 
 from .media import ensure_fonts
 from .paths import ASSET_DIR
-from .settings import OUT_DIR
+from .settings import OUT_DIR, resolve_out_dir
 from .scrape import BASE, CARD_COLORS, SERIES
 
 _TEMPLATE = None
@@ -24,7 +24,7 @@ def _file_uri(path_str):
     depuis le dossier de données (à côté du diaporama généré)."""
     p = Path(path_str).expanduser()
     if not p.is_absolute():
-        p = OUT_DIR.parent / p
+        p = resolve_out_dir().parent / p
     if not p.is_file():
         return None
     mime = {".png": "image/png", ".svg": "image/svg+xml",

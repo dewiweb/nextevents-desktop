@@ -10,6 +10,13 @@ import shutil
 from pathlib import Path
 
 
+def _ours(name):
+    """Nom de fichier produit par l'app (diapos + diapo du jour). La
+    synchro ne supprime à distance que ce qu'elle a elle-même poussé :
+    un dossier destination peut contenir des fichiers sans rapport."""
+    return name.startswith("slide-") or Path(name).stem in ("index", "qr")
+
+
 def _dirs(out_dir, cfg, proto):
     """Dossiers locaux à pousser : (sous-chemin distant, chemin local)."""
     out_dir = Path(out_dir)
@@ -59,7 +66,8 @@ def _ftp_push_dir(ftp, src, sub):
                 with open(p, "rb") as f:
                     ftp.storbinary(f"STOR {name}", f)
                 print(f"  ↑ {sub + '/' if sub else ''}{name}")
-            for name in sorted(remote - set(local)):
+            for name in sorted(n for n in remote - set(local)
+                               if _ours(n)):
                 ftp.delete(name)
                 print(f"  - distant : {name} supprimé")
             if hsub:
@@ -140,7 +148,7 @@ def _smb_push_dir(src, d):
             with open(p, "rb") as f, open_file(dd + "\\" + name, "wb") as dst:
                 dst.write(f.read())
             print(f"  ↑ smb {name}")
-        for name in sorted(remote - set(local)):
+        for name in sorted(n for n in remote - set(local) if _ours(n)):
             remove(dd + "\\" + name)
             print(f"  - smb : {name} supprimé")
     manifest = src / "manifest.txt"
@@ -204,7 +212,8 @@ def _local_push_dir(src, d):
                 continue  # déjà à jour à distance
             shutil.copy2(p, dd / name)
             print(f"  ↑ {dd / name}")
-        for name in sorted(set(remote) - set(local)):
+        for name in sorted(n for n in set(remote) - set(local)
+                           if _ours(n)):
             (dd / name).unlink()
             print(f"  - local : {name} supprimé")
     manifest = src / "manifest.txt"

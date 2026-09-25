@@ -11,9 +11,12 @@ visible à la pause et au moindre mouvement de souris ~2 s), flèches
 ←/→ = navigation, F11 = plein écran, Échap = quitter.
 """
 
+import threading
+
 from PySide6.QtCore import (QEasingCurve, QParallelAnimationGroup,
-                            QPoint, QPropertyAnimation, Qt, QTimer)
-from PySide6.QtGui import QPainter, QPixmap
+                            QPoint, QPropertyAnimation, Qt, QTimer,
+                            Signal)
+from PySide6.QtGui import QImage, QPainter, QPixmap
 from PySide6.QtWidgets import (QGraphicsOpacityEffect, QLabel,
                                QMainWindow, QWidget)
 
@@ -30,8 +33,12 @@ class _Slide(QWidget):
         self._pix = QPixmap()
         self._scaled = None  # cache : éviter de re-lisser à chaque frame
 
-    def set_slide(self, path):
-        self._pix = QPixmap(str(path))
+    def set_slide(self, path, img=None):
+        # img : QImage pré-décodée en worker — évite de décoder un PNG
+        # UHD (~100-200 ms) sur le thread GUI au moment de la transition
+        self._pix = (QPixmap.fromImage(img)
+                     if img is not None and not img.isNull()
+                     else QPixmap(str(path)))
         self._scaled = None
         self.update()
 
@@ -53,6 +60,8 @@ class _Slide(QWidget):
 
 
 class SlideshowWindow(QMainWindow):
+    img_ready = Signal(str, object)  # chemin, QImage décodée en worker
+
     def __init__(self, portrait=False):
         super().__init__()
         self.portrait = portrait
@@ -66,6 +75,10 @@ class SlideshowWindow(QMainWindow):
         self._fp = []
         self._paused = False
         self._anim = None
+        # pré-décodage de la diapo suivante (QImage borné à 2 entrées)
+        self._img_cache = {}
+        self._img_busy = set()
+        self.img_ready.connect(self._on_img_ready)
 
         self._cur = _Slide(self)
         self._next = _Slide(self)
@@ -126,6 +139,7 @@ class SlideshowWindow(QMainWindow):
         self._empty.raise_()
         if fp == self._fp:
             return
+        self._img_cache.clear()  # liste ou contenus changés
         cur = self._names[self._idx] if 0 <= self._idx < len(
             self._names) else None
         same_names = names == self._names
@@ -139,7 +153,8 @@ class SlideshowWindow(QMainWindow):
             self._show(0)
             self._arm()
         elif same_names and 0 <= self._idx < len(self._paths):
-            self._cur.set_slide(self._paths[self._idx])
+            p = self._paths[self._idx]
+            self._cur.set_slide(p, self._img_cache.pop(str(p), None))
 
     def _arm(self):
         self._timer.stop()
@@ -158,7 +173,8 @@ class SlideshowWindow(QMainWindow):
             self._anim.stop()
             self._swap()
         incoming, outgoing = self._next, self._cur
-        incoming.set_slide(path)
+        incoming.set_slide(path, self._img_cache.pop(str(path), None))
+        self._prefetch_next()
         if trans == "none" or dur <= 0:
             incoming.move(0, 0)
             incoming.raise_()
@@ -203,6 +219,28 @@ class SlideshowWindow(QMainWindow):
         self._cur.setGraphicsEffect(None)
         self._cur.move(0, 0)
         self._cur.raise_()
+
+    def _prefetch_next(self):
+        """Décode la diapo suivante dans un worker — le changement de
+        diapo ne paye alors que la conversion QPixmap, pas la lecture
+        PNG UHD."""
+        if len(self._paths) < 2:
+            return
+        p = str(self._paths[(self._idx + 1) % len(self._paths)])
+        if p in self._img_cache or p in self._img_busy:
+            return
+        self._img_busy.add(p)
+
+        def work():
+            self.img_ready.emit(p, QImage(p))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_img_ready(self, path, img):
+        self._img_busy.discard(path)
+        if img.isNull():
+            return
+        self._img_cache = {path: img}  # une seule suivante suffit
 
     def _advance(self):
         if self._names:

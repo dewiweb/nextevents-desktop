@@ -140,7 +140,11 @@ Lancer `nextevents.exe` / l'AppImage → fenêtre principale :
 
 - **Général** — réglages (intervalle, nb d'événements, résolution,
   layouts), dossiers locaux, journal de génération
-- **Destinations** — FTP/FTPS et SMB avec test de connexion
+- **Destinations** — FTP/FTPS et SMB avec test de connexion. Les
+  synchros sont **miroir** : elles suppriment à distance les fichiers
+  générés (`slide-*`, `index`/`qr`) absents en local — utilisez un
+  dossier de destination dédié ; préférez FTPS à FTP (identifiants
+  chiffrés)
 - **Diapo du jour** — choix d'un événement, intervenants, fond,
   notes, génération + envoi, aperçu
 - **Diaporama** — réglages de lecture par orientation, lancement du
