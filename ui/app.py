@@ -143,5 +143,14 @@ def run(icon_path):
     timer.start(5000)
 
     threading.Thread(target=scheduler, daemon=True).start()
-    _show()
+
+    prefs = load_settings()
+    mode = prefs.get("autostart_slideshow", "none")
+    if mode in ("landscape", "portrait"):
+        QTimer.singleShot(
+            500, lambda: win._open_slideshow(mode == "portrait"))
+    if tray_ok and prefs.get("start_minimized", 0):
+        win.hide()      # démarre dans le tray, sans fenêtre
+    else:
+        _show()
     app.exec()

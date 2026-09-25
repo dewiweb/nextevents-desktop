@@ -126,12 +126,15 @@ class TodayTab(QWidget):
         self.access_hint = QLabel("")
         self.access_hint.setWordWrap(True)
         form.addWidget(self.access_hint)
+        form.addStretch(1)
         cols.addLayout(form, 3)
 
         right = QVBoxLayout()
         right.addWidget(QLabel(
             "Description détaillée (référence pour corriger les champs)"))
         self.desc = QPlainTextEdit(readOnly=True)
+        self.desc.setPlaceholderText(
+            "Sélectionnez un événement pour voir sa description.")
         self.desc.setStyleSheet("font-size:12.5px;color:#bfbbb8")
         right.addWidget(self.desc, 1)
         cols.addLayout(right, 2)
@@ -153,6 +156,8 @@ class TodayTab(QWidget):
         outer.addLayout(row)
 
         self.load_events()
+        if not self._spk_box.count():
+            self._add_speaker("", "")
 
     # ——— données ———
 

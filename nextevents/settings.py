@@ -13,9 +13,20 @@ SETTINGS_FILE = Path(os.environ.get("SETTINGS_FILE", OUT_DIR / "settings.json"))
 DEFAULTS = {
     "interval_hours": 0,
     "max_events": 0,
+    "limit_mode": "count",   # count | days | date
+    "limit_days": 14,
+    "limit_date": "",        # ISO YYYY-MM-DD
+    "oa_api_key": "",
+    "oa_agenda": "leschampslibres",
+    "data_source": "site",   # site | openagenda
     "resolution": "uhd",
     "gen_landscape": 1,
     "gen_portrait": 0,
+    "gen_categories": "rencontres-aux-champs-libres,"
+                      "concerts-aux-champs-libres,"
+                      "projections-aux-champs-libres,"
+                      "spectacles-aux-champs-libres,"
+                      "evenements-aux-champs-libres",
     "ftp_host": "",
     "ftp_port": 21,
     "ftp_user": "",
@@ -33,6 +44,9 @@ DEFAULTS = {
     "smb_send_portrait": 0,
     "local_dir": "",
     "out_dir": "",
+    "close_to_tray": 1,
+    "start_minimized": 0,
+    "autostart_slideshow": "none",
     "ss_delay": 8,
     "ss_transition": "fade",
     "ss_tdur": 1500,

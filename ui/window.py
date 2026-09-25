@@ -9,14 +9,14 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import Qt, QDate, QTimer, Signal
 from PySide6.QtGui import QIcon, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout,
+    QCheckBox, QComboBox, QDateEdit, QDialog, QFileDialog, QFormLayout,
     QFrame, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMainWindow, QPlainTextEdit,
-    QProgressBar, QPushButton, QSpinBox, QTabWidget, QVBoxLayout,
-    QWidget,
+    QProgressBar, QPushButton, QScrollArea, QSpinBox, QStackedWidget,
+    QTabWidget, QVBoxLayout, QWidget,
 )
 
 from nextevents.runner import run_generation, slides, slides_portrait
@@ -42,15 +42,31 @@ QLabel {{ color:{SUB} }}
 QLineEdit, QSpinBox, QComboBox, QPlainTextEdit {{ background:{BG};
     border:1px solid #302f2e; color:{INK}; border-radius:7px;
     padding:6px 10px }}
+QLineEdit:focus, QSpinBox:focus, QComboBox:focus,
+QPlainTextEdit:focus {{ border-color:#5a5652 }}
 QPushButton {{ background:#302f2e; color:{INK}; border:0;
     border-radius:8px; padding:9px 20px; font-weight:500 }}
+QPushButton:hover {{ background:#3a3836 }}
+QPushButton:pressed {{ background:#262524 }}
 QPushButton:disabled {{ opacity:.45 }}
 QPushButton[accent="true"] {{ background:{ACCENT}; color:#fff }}
+QPushButton[accent="true"]:hover {{ background:#cd5847 }}
+QPushButton[accent="true"]:pressed {{ background:#a84131 }}
+QPushButton[ghost="true"] {{ background:transparent;
+    border:1px solid #3a3836; color:{SUB}; font-weight:400 }}
+QPushButton[ghost="true"]:hover {{ color:{INK};
+    border-color:#5a5652 }}
+QPushButton[danger="true"] {{ background:transparent;
+    border:1px solid #5a2a24; color:#d98a7c }}
+QPushButton[danger="true"]:hover {{ background:#38201c;
+    border-color:{ACCENT}; color:#fff }}
 QTabWidget::pane {{ border:0 }}
 QTabBar::tab {{ background:{CARD}; color:{SUB}; padding:9px 20px;
     border:1px solid #302f2e; border-bottom:0;
     border-top-left-radius:9px; border-top-right-radius:9px }}
-QTabBar::tab:selected {{ color:{INK}; border-color:#4a4846 }}
+QTabBar::tab:hover {{ color:{INK} }}
+QTabBar::tab:selected {{ color:{INK}; border-color:#4a4846;
+    border-top:2px solid {ACCENT} }}
 QListWidget {{ background:{CARD}; border:1px solid #302f2e;
     border-radius:10px }}
 #appHeader {{ background:{CARD}; border-bottom:1px solid #302f2e }}
@@ -191,7 +207,14 @@ class MainWindow(QMainWindow):
     # ———————————————————— construction des onglets ————————————————————
 
     def _general_tab(self):
+        outer = QWidget()
+        outer_lay = QVBoxLayout(outer)
+        outer_lay.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea(widgetResizable=True)
+        scroll.setFrameShape(QFrame.NoFrame)
         w = QWidget()
+        scroll.setWidget(w)
+        outer_lay.addWidget(scroll)
         lay = QVBoxLayout(w)
         lay.setContentsMargins(18, 14, 18, 14)
         lay.setSpacing(14)
@@ -201,20 +224,114 @@ class MainWindow(QMainWindow):
         f.setLabelAlignment(Qt.AlignRight)
         self.interval = QSpinBox(minimum=0, maximum=999,
                                  suffix=" h (0 = off)")
+        self.interval.setFixedWidth(160)
+        # limitation des diapos : nombre, horizon en jours, ou date
+        self.limit_mode = QComboBox()
+        self.limit_mode.setFixedWidth(190)
+        self.limit_mode.addItem("Premiers N événements", "count")
+        self.limit_mode.addItem("Dans les N jours", "days")
+        self.limit_mode.addItem("Jusqu'au …", "date")
+        self._limit_stack = QStackedWidget()
         self.maxev = QSpinBox(minimum=0, maximum=999,
                               suffix=" (0 = tous)")
+        self.maxev.setFixedWidth(160)
+        self.limit_days = QSpinBox(minimum=1, maximum=365, value=14,
+                                   suffix=" jours")
+        self.limit_days.setFixedWidth(160)
+        self.limit_date = QDateEdit(calendarPopup=True)
+        self.limit_date.setFixedWidth(160)
+        self.limit_date.setDate(
+            QDate.currentDate().addDays(30))
+        self.limit_date.setMinimumDate(QDate.currentDate())
+        self._limit_stack.addWidget(self.maxev)
+        self._limit_stack.addWidget(self.limit_days)
+        self._limit_stack.addWidget(self.limit_date)
+        self.limit_mode.currentIndexChanged.connect(
+            self._limit_stack.setCurrentIndex)
+        row = QHBoxLayout()
+        row.addWidget(self.limit_mode)
+        row.addWidget(self._limit_stack)
+        row.addStretch(1)
         self.res = QComboBox()
+        self.res.setFixedWidth(220)
         self.res.addItem("UHD 3840×2160", "uhd")
         self.res.addItem("HD 1920×1080", "hd")
         self.gen_ls = QCheckBox("Paysage — poussé vers les partages")
         self.gen_pt = QCheckBox("Portrait — local seulement "
                                 "(portrait/, zip)")
         f.addRow("Rafraîchissement auto", self.interval)
-        f.addRow("Nb max d'événements", self.maxev)
+        f.addRow("Diapos générées", row)
         f.addRow("Résolution", self.res)
         f.addRow("Layouts générés", self.gen_ls)
         f.addRow("", self.gen_pt)
         lay.addWidget(sett)
+
+        catsbox = QGroupBox("Catégories générées")
+        f = QFormLayout(catsbox)
+        f.setLabelAlignment(Qt.AlignRight)
+        self._cat_boxes = {}
+        grid = QGridLayout()
+        from nextevents.scrape import CATEGORIES
+        for i, (label, slug) in enumerate(CATEGORIES):
+            cb = QCheckBox(label)
+            self._cat_boxes[slug] = cb
+            grid.addWidget(cb, i // 2, i % 2)
+        f.addRow(grid)
+        lay.addWidget(catsbox)
+
+        oa = QGroupBox("Source des événements")
+        f = QFormLayout(oa)
+        f.setLabelAlignment(Qt.AlignRight)
+        self.data_source = QComboBox()
+        self.data_source.addItem("Site web (scraping)", "site")
+        self.data_source.addItem("OpenAgenda", "openagenda")
+        f.addRow("Source", self.data_source)
+        self.oa_agenda = QLineEdit(placeholderText="leschampslibres")
+        self.oa_key = _pw("(non défini)")
+        f.addRow("Agenda", self.oa_agenda)
+        f.addRow("Clé API", self.oa_key)
+        row = QHBoxLayout()
+        t = QPushButton("Tester la clé")
+        t.setProperty("ghost", True)
+        t.clicked.connect(lambda: self._test("oa"))
+        row.addWidget(t)
+        self.oa_test = QLabel("")
+        row.addWidget(self.oa_test)
+        row.addStretch(1)
+        f.addRow(row)
+        lay.addWidget(oa)
+
+        appbox = QGroupBox("Application")
+        f = QFormLayout(appbox)
+        f.setLabelAlignment(Qt.AlignRight)
+        self.close_to_tray = QCheckBox(
+            "Réduire dans la zone de notification à la fermeture")
+        self.close_to_tray.setToolTip(
+            "Coché : fermer la fenêtre garde l'app active dans le tray "
+            "(planificateur et notifications continuent).\n"
+            "Décoché : fermer la fenêtre quitte l'application.")
+        if not self._tray_ok:
+            # désactivée mais conserve la valeur enregistrée : un save
+            # sur une machine sans tray n'efface pas la préférence
+            self.close_to_tray.setEnabled(False)
+            self.close_to_tray.setText(
+                "Réduire dans la zone de notification "
+                "(indisponible sur ce système)")
+        f.addRow("Fermeture", self.close_to_tray)
+        self.start_min = QCheckBox(
+            "Démarrer réduite dans la zone de notification")
+        if not self._tray_ok:
+            self.start_min.setEnabled(False)
+            self.start_min.setText(
+                "Démarrer réduite (zone de notification indisponible)")
+        f.addRow("Démarrage", self.start_min)
+        self.autostart_ss = QComboBox()
+        self.autostart_ss.setFixedWidth(220)
+        self.autostart_ss.addItem("Pas de diaporama", "none")
+        self.autostart_ss.addItem("Diaporama paysage", "landscape")
+        self.autostart_ss.addItem("Diaporama portrait", "portrait")
+        f.addRow("Au démarrage", self.autostart_ss)
+        lay.addWidget(appbox)
 
         dirs = QGroupBox("Dossiers locaux (disque / lecteur réseau)")
         f = QFormLayout(dirs)
@@ -246,11 +363,14 @@ class MainWindow(QMainWindow):
         log = QGroupBox("Journal")
         v = QVBoxLayout(log)
         self.log = QPlainTextEdit(readOnly=True)
+        self.log.setPlaceholderText(
+            "Le journal de génération s'affichera ici.")
         self.log.setStyleSheet(
             "font-family:monospace;font-size:12.5px;color:#bfbbb8")
         v.addWidget(self.log)
+        log.setMinimumHeight(180)
         lay.addWidget(log, 1)
-        return w
+        return outer
 
     def _destinations_tab(self):
         w = QWidget()
@@ -263,6 +383,7 @@ class MainWindow(QMainWindow):
         f.setLabelAlignment(Qt.AlignRight)
         self.ftp_host = QLineEdit(placeholderText="nas.local")
         self.ftp_port = QSpinBox(minimum=1, maximum=65535, value=21)
+        self.ftp_port.setFixedWidth(110)
         self.ftp_path = QLineEdit(placeholderText="/diaporama")
         self.ftp_user = QLineEdit()
         self.ftp_pass = _pw("(inchangé si vide)")
@@ -338,12 +459,15 @@ class MainWindow(QMainWindow):
             h = QHBoxLayout(g)
             delay = QSpinBox(minimum=2, maximum=3600,
                              suffix=" s")
+            delay.setFixedWidth(110)
             trans = QComboBox()
+            trans.setFixedWidth(160)
             trans.addItem("Aucune", "none")
             trans.addItem("Fondu", "fade")
             trans.addItem("Glissement", "slide")
             tdur = QSpinBox(minimum=0, maximum=10000, singleStep=100,
                             suffix=" ms")
+            tdur.setFixedWidth(110)
             sfx = orientation or ""
             setattr(self, "ss_delay" + sfx, delay)
             setattr(self, "ss_transition" + sfx, trans)
@@ -379,7 +503,7 @@ class MainWindow(QMainWindow):
         dl.clicked.connect(self._download_zip)
         row.addWidget(dl)
         rm = QPushButton("Supprimer")
-        rm.setProperty("ghost", True)
+        rm.setProperty("danger", True)
         rm.setToolTip("Supprimer la sélection (Suppr)")
         rm.clicked.connect(self._delete_selected)
         row.addWidget(rm)
@@ -417,9 +541,15 @@ class MainWindow(QMainWindow):
         s.update(
             interval_hours=self.interval.value(),
             max_events=self.maxev.value(),
+            limit_mode=self.limit_mode.currentData(),
+            limit_days=self.limit_days.value(),
+            limit_date=self.limit_date.date().toString("yyyy-MM-dd"),
             resolution=self.res.currentData(),
             gen_landscape=int(self.gen_ls.isChecked()),
             gen_portrait=int(self.gen_pt.isChecked()),
+            gen_categories=",".join(
+                slug for slug, cb in self._cat_boxes.items()
+                if cb.isChecked()),
             ftp_host=self.ftp_host.text().strip(),
             ftp_port=self.ftp_port.value(),
             ftp_path=self.ftp_path.text().strip(),
@@ -435,6 +565,11 @@ class MainWindow(QMainWindow):
             smb_send_portrait=int(self.smb_pt.isChecked()),
             out_dir=self.out_dir.text().strip(),
             local_dir=self.local_dir.text().strip(),
+            close_to_tray=int(self.close_to_tray.isChecked()),
+            oa_agenda=self.oa_agenda.text().strip(),
+            data_source=self.data_source.currentData(),
+            start_minimized=int(self.start_min.isChecked()),
+            autostart_slideshow=self.autostart_ss.currentData(),
             ss_delay=self.ss_delay.value(),
             ss_transition=self.ss_transition.currentData(),
             ss_tdur=self.ss_tdur.value(),
@@ -442,9 +577,10 @@ class MainWindow(QMainWindow):
             ss_transition_p=self.ss_transition_p.currentData(),
             ss_tdur_p=self.ss_tdur_p.value(),
         )
-        # mot de passe vide = inchangé
+        # mot de passe / clé : vide = inchangé
         for k, w in (("ftp_pass", self.ftp_pass),
-                     ("smb_pass", self.smb_pass)):
+                     ("smb_pass", self.smb_pass),
+                     ("oa_api_key", self.oa_key)):
             if w.text():
                 s[k] = w.text()
         return s
@@ -465,6 +601,8 @@ class MainWindow(QMainWindow):
                 w.textChanged.connect(self._mark_dirty)
             for w in tab.findChildren(QSpinBox):
                 w.valueChanged.connect(self._mark_dirty)
+            for w in tab.findChildren(QDateEdit):
+                w.dateChanged.connect(self._mark_dirty)
             for w in tab.findChildren(QComboBox):
                 w.currentIndexChanged.connect(self._mark_dirty)
             for w in tab.findChildren(QCheckBox):
@@ -490,10 +628,21 @@ class MainWindow(QMainWindow):
         s = load_settings()
         self.interval.setValue(s["interval_hours"])
         self.maxev.setValue(s["max_events"])
+        i = self.limit_mode.findData(s.get("limit_mode") or "count")
+        self.limit_mode.setCurrentIndex(max(i, 0))
+        self.limit_days.setValue(int(s.get("limit_days") or 14))
+        try:
+            self.limit_date.setDate(
+                QDate.fromString(s.get("limit_date") or "", "yyyy-MM-dd"))
+        except Exception:
+            pass
         self.res.setCurrentIndex(
             self.res.findData(s["resolution"]))
         self.gen_ls.setChecked(bool(s["gen_landscape"]))
         self.gen_pt.setChecked(bool(s["gen_portrait"]))
+        enabled = set((s.get("gen_categories") or "").split(","))
+        for slug, cb in self._cat_boxes.items():
+            cb.setChecked(slug in enabled)
         self.ftp_host.setText(s["ftp_host"])
         self.ftp_port.setValue(s["ftp_port"] or 21)
         self.ftp_path.setText(s["ftp_path"])
@@ -515,6 +664,17 @@ class MainWindow(QMainWindow):
             else "(non défini)")
         self.out_dir.setText(s["out_dir"])
         self.local_dir.setText(s["local_dir"])
+        self.oa_agenda.setText(s.get("oa_agenda") or "leschampslibres")
+        i = self.data_source.findData(s.get("data_source") or "site")
+        self.data_source.setCurrentIndex(max(i, 0))
+        self.oa_key.setPlaceholderText(
+            "(enregistrée — vide = inchangé)" if s.get("oa_api_key")
+            else "(non défini)")
+        self.close_to_tray.setChecked(bool(s.get("close_to_tray", 1)))
+        self.start_min.setChecked(bool(s.get("start_minimized", 0)))
+        i = self.autostart_ss.findData(
+            s.get("autostart_slideshow") or "none")
+        self.autostart_ss.setCurrentIndex(max(i, 0))
         self.ss_delay.setValue(s["ss_delay"] or 8)
         self.ss_transition.setCurrentIndex(
             self.ss_transition.findData(s["ss_transition"]))
@@ -617,6 +777,14 @@ class MainWindow(QMainWindow):
                             ftp.mkd(p)
                             ftp.cwd(p)
                     ftp.quit()
+                elif proto == "oa":
+                    import requests
+                    r = requests.get(
+                        "https://api.openagenda.com/v2/agendas/"
+                        f"{s['oa_agenda']}/events",
+                        params={"key": s["oa_api_key"], "size": 1},
+                        timeout=15)
+                    r.raise_for_status()
                 else:
                     from smbclient import listdir, register_session
                     register_session(s["smb_host"], username=s["smb_user"],
@@ -859,13 +1027,28 @@ class MainWindow(QMainWindow):
         return True
 
     def closeEvent(self, e):
-        # fermeture = réduire dans le tray si possible (les réglages
-        # modifiés restent en mémoire, rien n'est perdu) ; sinon on
-        # quitte réellement → confirmation si non enregistré
-        if self._tray_ok:
+        # fermeture : réduire dans le tray si l'option est active
+        # (réglage persisté — les modifs non enregistrées restent en
+        # mémoire, rien n'est perdu) ; sinon on quitte réellement →
+        # confirmations génération en cours / réglages modifiés
+        if self._tray_ok and load_settings().get("close_to_tray", 1):
             e.ignore()
             self.hide()
-        elif self.confirm_quit():
-            e.accept()
-        else:
+            return
+        from PySide6.QtWidgets import QMessageBox
+        if state["running"]:
+            r = QMessageBox.question(
+                self, "Quitter Nextevents",
+                "Une génération est en cours — quitter quand même ?",
+                QMessageBox.Yes | QMessageBox.No)
+            if r != QMessageBox.Yes:
+                e.ignore()
+                return
+        if not self.confirm_quit():
             e.ignore()
+            return
+        e.accept()
+        # quitOnLastWindowClosed est False quand un tray existe :
+        # fermer ne suffit pas à terminer le process
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance().quit()

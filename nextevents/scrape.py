@@ -17,7 +17,17 @@ CATEGORIES = [
     ("Projection", "projections-aux-champs-libres"),
     ("Spectacle", "spectacles-aux-champs-libres"),
     ("Temps fort", "evenements-aux-champs-libres"),
+    ("Animation", "animations-aux-champs-libres"),
+    ("Atelier", "ateliers-aux-champs-libres"),
+    ("Exposition", "expositions-aux-champs-libres"),
+    ("RDV4C", "rdv4c-aux-champs-libres"),
+    ("Visite", "visites-aux-champs-libres"),
 ]
+# les 5 catégories « vitrine » historiques : défaut du réglage
+# gen_categories (le reste — ateliers, visites, rdv4c… — produit un
+# volume très supérieur de séances récurrentes)
+DEFAULT_CATEGORIES = [
+    slug for _, slug in CATEGORIES[:5]]
 
 # Couleurs de card du site : nom du modifieur CSS -> (fond, variante foncée).
 # Reflète les classes .v-event--{couleur} / .v-banner--{couleur} du site
@@ -37,11 +47,12 @@ CARD_COLORS = {
 # série — double canal, la page série est la source exhaustive.
 SERIES = {"les-grands-temoins": "Les grands témoins"}
 
-SPEC_ICONS = {"Date": "calendar", "Durée": "timer", "Lieu": "pin",
-              "Tarif": "ticket", "Public": "group",
+SPEC_ICONS = {"Date": "calendar", "Séances": "calendar", "Durée": "timer",
+              "Lieu": "pin", "Tarif": "ticket", "Public": "group",
               "Accessibilité": "accessibility"}
 SPRITE_LABELS = {v: k for k, v in SPEC_ICONS.items()}
-SPEC_ORDER = ["Date", "Durée", "Lieu", "Tarif", "Public", "Accessibilité"]
+SPEC_ORDER = ["Date", "Séances", "Durée", "Lieu", "Tarif", "Public",
+              "Accessibilité"]
 
 session = requests.Session()
 session.headers["User-Agent"] = UA
@@ -103,11 +114,43 @@ def event_dates(ev):
     return None, None
 
 
-def list_events(max_pages=99):
+def group_sessions(events):
+    """Fusionne les séances multiples d'un même événement : le site
+    éclate chaque date en carte séparée (animations, ateliers, visites
+    et rdv4c récurrents → des dizaines de cartes par événement). Une
+    diapo = un événement : on garde la prochaine séance et on signale
+    le nombre total de séances à venir via la spec « Séances »."""
+    groups = {}
+    for ev in events:
+        key = re.sub(r"[^a-z0-9à-ÿ]+", "", (ev.get("title") or "")
+                     .lower())
+        groups.setdefault(key, []).append(ev)
+    out = []
+    for g in groups.values():
+        # la carte de la prochaine séance porte image/tag/couleur ;
+        # son « Date » est la prochaine occurrence — c'est elle qui
+        # compte pour l'affichage et le tri
+        g.sort(key=lambda e: e.get("_dt") or (9999, 12, 31, 23, 59))
+        ev = g[0]
+        if len(g) > 1:
+            ev["n_sessions"] = len(g)
+            ev["specs"]["Séances"] = f"{len(g)} séances à venir"
+        out.append(ev)
+    out.sort(key=lambda e: (
+        0 if e.get("pinned") else 1, e.get("_dt") or (9999, 12, 31, 23, 59)))
+    return out
+
+
+def list_events(max_pages=99, categories=None):
     """Itère les pages de chaque catégorie et retourne les événements
-    dédupliqués, triés chronologiquement."""
+    dédupliqués, triés chronologiquement. `categories` restreint aux
+    slugs donnés ; None = les 5 catégories vitrine historiques."""
+    wanted = (set(categories) if categories is not None
+              else set(DEFAULT_CATEGORIES))
     events, seen = [], set()
     for cat_label, slug in CATEGORIES:
+        if slug not in wanted:
+            continue
         list_url = f"{BASE}/au-programme/categorie/{slug}"
         page = 1
         while page <= max_pages:
@@ -134,6 +177,7 @@ def list_events(max_pages=99):
     for ev in events:
         start, end = event_dates(ev)
         ev["_dt"] = start
+        ev["_dt_end"] = end or start
         # événement multi-jours en cours (début passé ou aujourd'hui) :
         # épinglé en tête du diaporama jusqu'à sa date de fin
         ev["pinned"] = bool(

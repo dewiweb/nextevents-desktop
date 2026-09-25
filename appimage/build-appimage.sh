@@ -69,6 +69,24 @@ rm -f "$APPDIR/usr/bin/nextevents" "$APPDIR/usr/bin/node" \
 # récents → on le retire plutôt que d'embarquer une lib obsolète
 rm -f "$APPDIR"/opt/nextevents/_internal/PySide6/Qt/plugins/imageformats/libqtiff.so
 
+# Libs que linuxdeploy refuse d'embarquer (sa liste d'exclusion suppose
+# GL/X11 fournis par l'hôte) mais dont Qt6 a des NEEDED stricts :
+#   - libEGL.so.1 + dispatchers libglvnd : sans elles l'app ne démarre
+#     pas sur un système sans mesa ; ce sont de purs aiguilleurs vers
+#     le driver de l'hôte (mesa, nvidia…) — sûrs à embarquer
+#   - libxcb-shape.so.0 : extension xcb requise par libQt6XcbQpa /
+#     libqxcb — l'app échouerait sur X11 sans elle
+for lib in libEGL.so.1 libGLdispatch.so.0 libGLX.so.0 libOpenGL.so.0 \
+           libxcb-shape.so.0; do
+    src=$(ldconfig -p | awk -v l="$lib" \
+        '$1==l && /x86-64/{print $NF; exit}')
+    if [ -n "$src" ]; then
+        cp -L "$src" "$APPDIR/usr/lib/$lib"
+    else
+        echo "ATTENTION : $lib introuvable sur l'hôte de build" >&2
+    fi
+done
+
 # --- vérification : aucune dépendance non résolue -------------------------
 QTLIB=$(find "$APPDIR/opt/nextevents/_internal/PySide6/Qt/lib" \
         -maxdepth 0 -type d 2>/dev/null || true)

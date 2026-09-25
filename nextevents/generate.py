@@ -7,7 +7,11 @@ from PIL import Image
 
 from .media import download_image, ensure_fonts
 from .paths import OUT_DIR
-from .scrape import list_events, mark_series, parse_detail
+from .scrape import (
+    DEFAULT_CATEGORIES, group_sessions, list_events, mark_series,
+    parse_detail,
+)
+from .oa import oa_list_events
 from .slide import (
     DESIGNS, render_all, slide_html, slide_name, SIZES, DEFAULT_SIZE,
 )
@@ -70,6 +74,41 @@ def _render_set(events, fonts, dest, size, orientation="landscape"):
     return pngs
 
 
+def _limit_events(events, cfg, max_events):
+    """Filtre de fin de liste : par nombre (historique), par horizon
+    « dans les N jours » ou « jusqu'au <date> ». Un événement est gardé
+    si sa fenêtre [début, fin] intersecte [aujourd'hui, horizon] —
+    les multi-jours en cours (épinglés) restent donc visibles."""
+    import datetime
+    cfg = cfg or {}
+    mode = cfg.get("limit_mode", "count")
+    if mode == "count":
+        return events[:max_events] if max_events else events
+    today = datetime.date.today()
+    if mode == "days":
+        horizon = today + datetime.timedelta(
+            days=int(cfg.get("limit_days") or 0))
+    elif mode == "date":
+        try:
+            horizon = datetime.date.fromisoformat(
+                str(cfg.get("limit_date") or ""))
+        except ValueError:
+            return events
+    else:
+        return events
+    out = []
+    for ev in events:
+        s = ev.get("_dt")
+        if not s:
+            out.append(ev)  # sans date (expo permanente) : toujours
+            continue
+        e = ev.get("_dt_end") or s
+        sd, ed = datetime.date(*s[:3]), datetime.date(*e[:3])
+        if sd <= horizon and ed >= today:
+            out.append(ev)
+    return out
+
+
 def generate(out_dir=None, max_events=0, pages=99, cfg=None, size=DEFAULT_SIZE):
     """Génère le diaporama complet. Retourne la liste des PNG produits.
     cfg peut contenir les réglages ftp_* et smb_* pour pousser le
@@ -77,9 +116,24 @@ def generate(out_dir=None, max_events=0, pages=99, cfg=None, size=DEFAULT_SIZE):
     out = Path(out_dir) if out_dir else OUT_DIR
 
     print("1/5 Récupération des événements…")
-    events = list_events(max_pages=pages)
-    if max_events:
-        events = events[:max_events]
+    cats = DEFAULT_CATEGORIES
+    if cfg and "gen_categories" in cfg:
+        cats = [c for c in cfg["gen_categories"].split(",") if c]
+    use_oa = cfg and cfg.get("data_source") == "openagenda"
+    if use_oa:
+        try:
+            from .oa import filter_categories
+            events = filter_categories(oa_list_events(cfg), cats)
+        except Exception as e:
+            # OA injoignable/clé invalide → repli site (seule source
+            # de la couleur éditoriale de toute façon)
+            print(f"  ! OpenAgenda KO ({e}) — repli scraping du site")
+            use_oa = False
+    if not use_oa:
+        events = list_events(max_pages=pages, categories=cats)
+        # une carte par séance sur le site → une diapo par événement
+        events = group_sessions(events)
+    events = _limit_events(events, cfg, max_events)
     print(f"  {len(events)} événements trouvés")
     if not events:
         raise RuntimeError(
@@ -87,9 +141,16 @@ def generate(out_dir=None, max_events=0, pages=99, cfg=None, size=DEFAULT_SIZE):
         )
 
     print("2/5 Pages de détail + images…")
-    with ThreadPoolExecutor(max_workers=6) as ex:
-        events = list(ex.map(lambda e: download_image(parse_detail(e)), events))
-    mark_series(events)
+    if use_oa:
+        # OA donne déjà desc/speakers/image — pas de page détail à
+        # scraper ; on télécharge juste l'image
+        with ThreadPoolExecutor(max_workers=6) as ex:
+            events = list(ex.map(download_image, events))
+    else:
+        with ThreadPoolExecutor(max_workers=6) as ex:
+            events = list(
+                ex.map(lambda e: download_image(parse_detail(e)), events))
+        mark_series(events)
 
     # métadonnées pour la « diapo du jour » de la webui
     import json

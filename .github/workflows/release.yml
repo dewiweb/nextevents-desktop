@@ -78,9 +78,12 @@ jobs:
           playwright install chromium --only-shell
           sudo env "PATH=$PATH" playwright install-deps chromium
           # libs que linuxdeploy doit trouver pour le plugin Qt xcb
+          # + libegl1/libxcb-shape0 que le build copie manuellement
+          # dans l'AppImage (linuxdeploy les exclut mais Qt6 les exige)
           sudo apt-get update && sudo apt-get install -y \
             libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
-            libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0
+            libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0 \
+            libegl1 libxcb-shape0
 
       - name: Build with PyInstaller
         run: pyinstaller app.spec --noconfirm
