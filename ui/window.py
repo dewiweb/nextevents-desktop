@@ -167,11 +167,11 @@ class MainWindow(QMainWindow):
         self._tab_general = self._general_tab()
         self._tab_dest = self._destinations_tab()
         self.today_tab = TodayTab(self)
-        self._tab_ss = self._slideshow_tab()
+        self._tab_ss = self._gallery_tab()
         tabs.addTab(self._tab_general, "Général")
         tabs.addTab(self._tab_dest, "Destinations")
         tabs.addTab(self.today_tab, "Diapo du jour")
-        tabs.addTab(self._tab_ss, "Diaporama")
+        tabs.addTab(self._tab_ss, "Galerie")
         tabs.setCurrentIndex(0)
         root.addWidget(tabs, 1)
         self.setCentralWidget(central)
@@ -523,47 +523,14 @@ class MainWindow(QMainWindow):
         lay.addStretch(1)
         return w
 
-    def _slideshow_tab(self):
+    def _gallery_tab(self):
+        """Un sous-onglet par orientation — même organisation que le
+        dossier de sortie : landscape/ et portrait/."""
         w = QWidget()
         lay = QVBoxLayout(w)
         lay.setContentsMargins(18, 14, 18, 14)
         lay.setSpacing(14)
 
-        for orientation, label in (("", "Diapos paysage"),
-                                   ("_p", "Diapos portrait — local")):
-            g = QGroupBox(label)
-            h = QHBoxLayout(g)
-            delay = QSpinBox(minimum=2, maximum=3600,
-                             suffix=" s")
-            delay.setFixedWidth(110)
-            trans = QComboBox()
-            trans.setFixedWidth(160)
-            trans.addItem("Aucune", "none")
-            trans.addItem("Fondu", "fade")
-            trans.addItem("Glissement", "slide")
-            tdur = QSpinBox(minimum=0, maximum=10000, singleStep=100,
-                            suffix=" ms")
-            tdur.setFixedWidth(110)
-            sfx = orientation or ""
-            setattr(self, "ss_delay" + sfx, delay)
-            setattr(self, "ss_transition" + sfx, trans)
-            setattr(self, "ss_tdur" + sfx, tdur)
-            h.addWidget(QLabel("Intervalle"))
-            h.addWidget(delay)
-            h.addWidget(QLabel("Transition"))
-            h.addWidget(trans)
-            h.addWidget(QLabel("Durée"))
-            h.addWidget(tdur)
-            h.addStretch(1)
-            b = QPushButton("Ouvrir le slideshow")
-            b.setProperty("ghost", True)
-            b.clicked.connect(lambda _=False, p=bool(sfx):
-                              self._open_slideshow(p))
-            h.addWidget(b)
-            lay.addWidget(g)
-
-        gal = QGroupBox("Galerie")
-        v = QVBoxLayout(gal)
         row = QHBoxLayout()
         rf = QPushButton("Actualiser")
         rf.setProperty("ghost", True)
@@ -584,29 +551,73 @@ class MainWindow(QMainWindow):
         rm.clicked.connect(self._delete_selected)
         row.addWidget(rm)
         row.addStretch(1)
-        v.addLayout(row)
-        self.gallery = QListWidget()
-        self.gallery.setSelectionMode(QListWidget.ExtendedSelection)
-        self.gallery.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.gallery.customContextMenuRequested.connect(
-            self._gallery_menu)
-        self.gallery.setViewMode(QListWidget.IconMode)
-        self.gallery.setResizeMode(QListWidget.Adjust)
-        self.gallery.setIconSize(QPixmap(1, 1).scaled(280, 160).size())
-        # grille uniforme : les noms de fichier longs ne décalent pas
-        # les colonnes — le texte est élidé au centre
-        self.gallery.setUniformItemSizes(True)
-        self.gallery.setGridSize(
-            QPixmap(1, 1).scaled(300, 205).size())
-        self.gallery.setWordWrap(False)
-        self.gallery.setTextElideMode(Qt.ElideMiddle)
-        self.gallery.setSpacing(8)
-        self.gallery.itemDoubleClicked.connect(self._preview_slide)
-        QShortcut(QKeySequence.Delete, self.gallery,
-                  context=Qt.WidgetWithChildrenShortcut,
-                  activated=self._delete_selected)
-        v.addWidget(self.gallery)
-        lay.addWidget(gal, 1)
+        lay.addLayout(row)
+
+        self.galleries = {}
+        inner = QTabWidget()
+        inner.setDocumentMode(True)
+        # suffixe réglages, sous-dossier, titre d'onglet, taille vignette
+        for sfx, sub, label, tw, th in (
+                ("", "landscape", "Paysage — landscape/", 280, 160),
+                ("_p", "portrait", "Portrait — portrait/", 160, 285)):
+            page = QWidget()
+            pv = QVBoxLayout(page)
+            pv.setContentsMargins(0, 12, 0, 0)
+            pv.setSpacing(12)
+
+            play = QGroupBox("Lecture")
+            h = QHBoxLayout(play)
+            delay = QSpinBox(minimum=2, maximum=3600, suffix=" s")
+            delay.setFixedWidth(110)
+            trans = QComboBox()
+            trans.setFixedWidth(160)
+            trans.addItem("Aucune", "none")
+            trans.addItem("Fondu", "fade")
+            trans.addItem("Glissement", "slide")
+            tdur = QSpinBox(minimum=0, maximum=10000, singleStep=100,
+                            suffix=" ms")
+            tdur.setFixedWidth(110)
+            setattr(self, "ss_delay" + sfx, delay)
+            setattr(self, "ss_transition" + sfx, trans)
+            setattr(self, "ss_tdur" + sfx, tdur)
+            h.addWidget(QLabel("Intervalle"))
+            h.addWidget(delay)
+            h.addWidget(QLabel("Transition"))
+            h.addWidget(trans)
+            h.addWidget(QLabel("Durée"))
+            h.addWidget(tdur)
+            h.addStretch(1)
+            b = QPushButton("Ouvrir le slideshow")
+            b.setProperty("ghost", True)
+            b.clicked.connect(lambda _=False, p=bool(sfx):
+                              self._open_slideshow(p))
+            h.addWidget(b)
+            pv.addWidget(play)
+
+            gal = QListWidget()
+            gal.setSelectionMode(QListWidget.ExtendedSelection)
+            gal.setContextMenuPolicy(Qt.CustomContextMenu)
+            gal.customContextMenuRequested.connect(
+                lambda pos, lst=gal: self._gallery_menu(lst, pos))
+            gal.setViewMode(QListWidget.IconMode)
+            gal.setResizeMode(QListWidget.Adjust)
+            gal.setIconSize(QPixmap(1, 1).scaled(tw, th).size())
+            # grille uniforme : les noms de fichier longs ne décalent
+            # pas les colonnes — le texte est élidé au centre
+            gal.setUniformItemSizes(True)
+            gal.setGridSize(QPixmap(1, 1).scaled(tw + 20, th + 45).size())
+            gal.setWordWrap(False)
+            gal.setTextElideMode(Qt.ElideMiddle)
+            gal.setSpacing(8)
+            gal.itemDoubleClicked.connect(self._preview_slide)
+            QShortcut(QKeySequence.Delete, gal,
+                      context=Qt.WidgetWithChildrenShortcut,
+                      activated=self._delete_selected)
+            pv.addWidget(gal, 1)
+            self.galleries[sub] = gal
+            inner.addTab(page, label)
+
+        lay.addWidget(inner, 1)
         return w
 
     # ———————————————————— réglages ————————————————————
@@ -1044,14 +1055,16 @@ class MainWindow(QMainWindow):
         for sub, names in (("landscape", slides()),
                            ("portrait", slides_portrait())):
             files += [d / sub / n for n in names]
-        self.gallery.clear()
+        for gal in self.galleries.values():
+            gal.clear()
         if not files:
             self._gal_seen = set()   # le suivi incrémental part de zéro
-            it = QListWidgetItem(
-                "Aucune diapo — lancez une génération (Ctrl+G)")
-            it.setFlags(Qt.NoItemFlags)
-            it.setTextAlignment(Qt.AlignCenter)
-            self.gallery.addItem(it)
+            for gal in self.galleries.values():
+                it = QListWidgetItem(
+                    "Aucune diapo — lancez une génération (Ctrl+G)")
+                it.setFlags(Qt.NoItemFlags)
+                it.setTextAlignment(Qt.AlignCenter)
+                gal.addItem(it)
             return
 
         def work():
@@ -1061,17 +1074,16 @@ class MainWindow(QMainWindow):
                 r = QImageReader(str(p))
                 sz = r.size()
                 if sz.isValid():
-                    sz.scale(280, 160, Qt.KeepAspectRatio)
+                    if p.parent.name == "portrait":
+                        sz.scale(160, 285, Qt.KeepAspectRatio)
+                    else:
+                        sz.scale(280, 160, Qt.KeepAspectRatio)
                     r.setScaledSize(sz)
                 img = r.read()
                 if img.isNull():
                     continue
                 rel = str(p.relative_to(d))
                 label = p.name.removeprefix("slide-").removesuffix(".png")
-                # la variante portrait porte le même nom que la paysage
-                # → suffixe pour distinguer les jumelles dans la grille
-                if p.parent.name == "portrait":
-                    label += "  ▯"
                 items.append((rel, label, img, str(p)))
             self.thumbs_ready.emit(gen, items)
 
@@ -1080,14 +1092,28 @@ class MainWindow(QMainWindow):
     def _fill_gallery(self, gen, items):
         if gen != self._gal_gen:
             return  # un rafraîchissement plus récent est en cours
-        self.gallery.clear()
+        for gal in self.galleries.values():
+            gal.clear()
         self._gal_seen = {rel for rel, _, _, _ in items}
         for rel, label, img, path in items:
+            gal = self.galleries.get(Path(rel).parent.name)
+            if gal is None:
+                continue
             it = QListWidgetItem(label)
             it.setIcon(QPixmap.fromImage(img))
             it.setData(Qt.UserRole, rel)
             it.setToolTip(path)
-            self.gallery.addItem(it)
+            gal.addItem(it)
+        for sub, gal in self.galleries.items():
+            if not gal.count():
+                it = QListWidgetItem(
+                    "Aucune diapo "
+                    f"{'paysage' if sub == 'landscape' else 'portrait'}"
+                    " — cochez le layout dans Général puis "
+                    "générez (Ctrl+G)")
+                it.setFlags(Qt.NoItemFlags)
+                it.setTextAlignment(Qt.AlignCenter)
+                gal.addItem(it)
 
     def _gallery_incremental(self):
         """Ajoute à la galerie les PNG apparus depuis le dernier
@@ -1116,15 +1142,16 @@ class MainWindow(QMainWindow):
                 r = QImageReader(str(p))
                 sz = r.size()
                 if sz.isValid():
-                    sz.scale(280, 160, Qt.KeepAspectRatio)
+                    if p.parent.name == "portrait":
+                        sz.scale(160, 285, Qt.KeepAspectRatio)
+                    else:
+                        sz.scale(280, 160, Qt.KeepAspectRatio)
                     r.setScaledSize(sz)
                 img = r.read()
                 if img.isNull():
                     items.append((rel, None, None, None))
                     continue
                 label = p.name.removeprefix("slide-").removesuffix(".png")
-                if p.parent.name == "portrait":
-                    label += "  ▯"
                 items.append((rel, label, img, str(p)))
             self.thumbs_append.emit(
                 items, {str(p.relative_to(d)) for p in new})
@@ -1137,18 +1164,19 @@ class MainWindow(QMainWindow):
         items = [t for t in items if t[2] is not None
                  and t[0] not in self._gal_seen]
         self._gal_seen.update(t[0] for t in items)
-        if not items:
-            return
-        # retire le placeholder « aucune diapo » s'il est encore là
-        if (self.gallery.count() == 1
-                and not self.gallery.item(0).data(Qt.UserRole)):
-            self.gallery.clear()
         for rel, label, img, path in items:
+            gal = self.galleries.get(Path(rel).parent.name)
+            if gal is None:
+                continue
+            # retire le placeholder « aucune diapo » s'il est encore là
+            if (gal.count() == 1
+                    and not gal.item(0).data(Qt.UserRole)):
+                gal.clear()
             it = QListWidgetItem(label)
             it.setIcon(QPixmap.fromImage(img))
             it.setData(Qt.UserRole, rel)
             it.setToolTip(path)
-            self.gallery.addItem(it)
+            gal.addItem(it)
 
     def _event_for(self, stem):
         """Retrouve l'événement dans events.json à partir du nom de la
@@ -1223,25 +1251,30 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(msg, 5000)
         if not rel:
             return
-        for i in range(self.gallery.count()):
-            it = self.gallery.item(i)
+        gal = self.galleries.get(Path(rel).parent.name)
+        if gal is None:
+            return
+        for i in range(gal.count()):
+            it = gal.item(i)
             if it.data(Qt.UserRole) == rel:
                 # même décodage réduit que les vignettes du worker
                 from PySide6.QtGui import QImageReader
                 r = QImageReader(str(resolve_out_dir() / rel))
                 sz = r.size()
                 if sz.isValid():
-                    sz.scale(280, 160, Qt.KeepAspectRatio)
+                    sz.scale(160, 285, Qt.KeepAspectRatio) \
+                        if rel.startswith("portrait/") else \
+                        sz.scale(280, 160, Qt.KeepAspectRatio)
                     r.setScaledSize(sz)
                 img = r.read()
                 if not img.isNull():
                     it.setIcon(QPixmap.fromImage(img))
                 break
 
-    def _gallery_menu(self, pos):
-        """Menu contextuel de la galerie : aperçu / fiche / suppression."""
+    def _gallery_menu(self, gal, pos):
+        """Menu contextuel d'une galerie : aperçu / fiche / suppression."""
         from PySide6.QtWidgets import QMenu
-        it = self.gallery.itemAt(pos)
+        it = gal.itemAt(pos)
         m = QMenu(self)
         if it and it.data(Qt.UserRole):
             m.addAction("Aperçu").triggered.connect(
@@ -1254,17 +1287,18 @@ class MainWindow(QMainWindow):
             if url:
                 m.addAction("Ouvrir la fiche de l'événement").triggered\
                     .connect(lambda: QDesktopServices.openUrl(QUrl(url)))
-        if self.gallery.selectedItems():
+        if gal.selectedItems():
             m.addAction("Supprimer la sélection…").triggered.connect(
                 self._delete_selected)
         if m.actions():
-            m.exec(self.gallery.viewport().mapToGlobal(pos))
+            m.exec(gal.viewport().mapToGlobal(pos))
 
     def _delete_selected(self):
         """Supprime les diapos sélectionnées : PNG paysage + portrait +
         HTML source (toutes les variantes), puis met manifest.txt à jour
         pour que la prochaine synchro propage la suppression."""
-        items = [it for it in self.gallery.selectedItems()
+        items = [it for gal in self.galleries.values()
+                 for it in gal.selectedItems()
                  if it.data(Qt.UserRole)]
         if not items:
             return

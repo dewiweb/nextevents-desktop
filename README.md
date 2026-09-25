@@ -169,10 +169,12 @@ Lancer `nextevents.exe` / l'AppImage → fenêtre principale :
   chiffrés)
 - **Diapo du jour** — choix d'un événement, intervenants, fond,
   notes, génération + envoi, aperçu
-- **Diaporama** — réglages de lecture par orientation, lancement du
-  player plein écran, galerie (aperçu au double-clic, suppression
-  multi-sélection via Suppr / clic droit — propage aux synchros),
-  export `.zip`
+- **Galerie** — un sous-onglet par orientation, calqué sur le dossier
+  de sortie : « Paysage — landscape/ » et « Portrait — portrait/ ».
+  Chacun a ses réglages de lecture (intervalle, transition, durée,
+  lancement du player) ; barre d'actions commune (actualiser, ouvrir
+  le dossier, export `.zip`, suppression multi-sélection via Suppr /
+  clic droit — propage aux synchros)
 
 Fermer la fenêtre réduit l'app dans la zone de notification ; double-
 clic sur l'icône la réaffiche. Clic droit : Afficher / Générer
