@@ -44,7 +44,8 @@ QGroupBox {{ background:{CARD}; border:1px solid #302f2e;
     font-size:15px }}
 QGroupBox::title {{ subcontrol-origin:margin; left:14px;
     padding:0 6px; color:{INK} }}
-QLabel {{ color:{SUB} }}
+QLabel {{ color:{SUB}; background:transparent }}
+QCheckBox, QRadioButton {{ background:transparent; spacing:8px }}
 QLineEdit, QSpinBox, QComboBox, QPlainTextEdit {{ background:{BG};
     border:1px solid #302f2e; color:{INK}; border-radius:7px;
     padding:6px 10px }}
