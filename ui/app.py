@@ -1,7 +1,6 @@
 """Application desktop : fenêtre Qt + icône de zone de notification
 (QSystemTrayIcon — Win32 natif / SNI sous Linux) + planificateur."""
 
-import subprocess
 import sys
 import threading
 
@@ -18,7 +17,7 @@ def run(icon_path):
     from PySide6.QtNetwork import QLocalServer, QLocalSocket
     from PySide6.QtWidgets import (QApplication, QFileDialog, QMenu,
                                    QMessageBox, QSystemTrayIcon)
-    from .window import MainWindow, STYLE, WheelGuard
+    from .window import MainWindow, STYLE, WheelGuard, open_dir
 
     app = QApplication(sys.argv)
     app.setApplicationName("Nextevents")
@@ -67,13 +66,7 @@ def run(icon_path):
 
     def _open_dir():
         try:
-            p = resolve_out_dir()
-            p.mkdir(parents=True, exist_ok=True)
-            if sys.platform == "win32":
-                import os
-                os.startfile(str(p))
-            else:
-                subprocess.Popen(["xdg-open", str(p)])
+            open_dir(resolve_out_dir())
         except OSError:
             pass
 

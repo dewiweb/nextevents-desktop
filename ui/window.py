@@ -37,6 +37,33 @@ from .tabs_gallery import GalleryTabMixin
 from .today import TodayTab
 
 
+def open_dir(path):
+    """Ouvre `path` dans le gestionnaire de fichiers de l'OS.
+
+    Sous Linux l'environnement du sous-processus est assaini :
+    LD_LIBRARY_PATH (PyInstaller/AppRun) et les variables Qt/GTK
+    embarquées ne doivent pas fuiter dans xdg-open — sinon les
+    ouvreurs natifs (gio, nemo…) peuvent échouer et le dossier
+    s'ouvre en listing dans le navigateur par repli."""
+    import os
+    import subprocess
+    import sys
+    path.mkdir(parents=True, exist_ok=True)
+    if sys.platform == "win32":
+        os.startfile(str(path))
+        return
+    env = dict(os.environ)
+    orig = env.pop("LD_LIBRARY_PATH_ORIG", None)
+    if orig:
+        env["LD_LIBRARY_PATH"] = orig
+    else:
+        env.pop("LD_LIBRARY_PATH", None)
+    for v in ("QT_PLUGIN_PATH", "QT_QPA_PLATFORM_PLUGIN_PATH",
+              "GIO_MODULE_DIR", "GTK_PATH", "GTK_EXE_PREFIX"):
+        env.pop(v, None)
+    subprocess.Popen(["xdg-open", str(path)], env=env)
+
+
 class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
                  QMainWindow):
     generate_done = Signal()  # émis dans le thread UI à la fin d'un run
@@ -454,15 +481,8 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
             "auto : " + " + ".join(bits) if bits else "auto : off")
 
     def _open_dir(self, path):
-        import subprocess, sys
         try:
-            path.mkdir(parents=True, exist_ok=True)
-            p = str(path)
-            if sys.platform == "win32":
-                import os
-                os.startfile(p)
-            else:
-                subprocess.Popen(["xdg-open", p])
+            open_dir(path)
         except OSError as e:
             self.statusBar().showMessage(
                 f"Impossible d'ouvrir le dossier : {e}", 5000)
