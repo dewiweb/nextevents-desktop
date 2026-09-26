@@ -179,8 +179,8 @@ def group_sessions(events):
     """Fusionne les séances multiples d'un même événement : le site
     éclate chaque date en carte séparée (animations, ateliers, visites
     et rdv4c récurrents → des dizaines de cartes par événement). Une
-    diapo = un événement : on garde la prochaine séance et on signale
-    le nombre total de séances à venir via la spec « Séances »."""
+    diapo = un événement : on garde la prochaine séance (la spec
+    « Séances : N à venir » n'apportait rien — retirée)."""
     groups = {}
     for ev in events:
         key = re.sub(r"[^a-z0-9à-ÿ]+", "", (ev.get("title") or "")
@@ -195,7 +195,6 @@ def group_sessions(events):
         ev = g[0]
         if len(g) > 1:
             ev["n_sessions"] = len(g)
-            ev["specs"]["Séances"] = f"{len(g)} séances à venir"
             d = ev["specs"].get("Date", "")
             if d and not d.startswith("Prochaine séance"):
                 ev["specs"]["Date"] = f"Prochaine séance : {d}"

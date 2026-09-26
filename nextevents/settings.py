@@ -13,6 +13,7 @@ SETTINGS_FILE = Path(os.environ.get("SETTINGS_FILE", OUT_DIR / "settings.json"))
 
 DEFAULTS = {
     "interval_hours": 0,
+    "sched_times": "",
     "max_events": 0,
     "limit_mode": "count",   # count | days | date
     "limit_days": 14,

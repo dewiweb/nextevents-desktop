@@ -52,19 +52,51 @@ def run_generation():
         save_settings(load_settings())
 
 
+def _interval_min(s):
+    """Rafraîchissement en minutes — interval_min nouveau format,
+    repli sur interval_hours des réglages antérieurs."""
+    return (s["interval_min"] if "interval_min" in s
+            else s.get("interval_hours", 0) * 60)
+
+
+def _times_due(spec, last_run, now=None):
+    """Heures fixes « HH:MM, HH:MM » — vrai si la plus récente
+    occurrence passée (aujourd'hui ou hier) est postérieure à
+    last_run. last_run None → l'occurrence passée du jour est due
+    (rattrapage au lancement)."""
+    import datetime as dt
+    now = now or dt.datetime.now()
+    times = []
+    for tok in spec.split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        try:
+            h, m = (int(x) for x in tok.split(":"))
+            times.append(dt.time(h % 24, m % 60))
+        except ValueError:
+            continue
+    if not times:
+        return False
+    past = [dt.datetime.combine(d, t).timestamp()
+            for d in (now.date(), now.date() - dt.timedelta(days=1))
+            for t in times
+            if dt.datetime.combine(d, t).timestamp() <= now.timestamp()]
+    return bool(past) and (last_run is None or last_run < max(past))
+
+
 def scheduler():
     while True:
         time.sleep(60)
         try:
             s = load_settings()
-            due = (
-                s["interval_hours"] > 0
-                and not state["running"]
-                and (
+            mins = _interval_min(s)
+            due = not state["running"] and (
+                (mins > 0 and (
                     state["last_run"] is None
-                    or time.time() - state["last_run"] >= s["interval_hours"] * 3600
-                )
-            )
+                    or time.time() - state["last_run"] >= mins * 60))
+                or _times_due(s.get("sched_times", ""),
+                              state["last_run"]))
             if due:
                 threading.Thread(target=run_generation, daemon=True).start()
         except Exception:

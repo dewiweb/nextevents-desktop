@@ -196,11 +196,6 @@ def _base_map(e, cat_value, cat_label, public_label, kws, cond, timings,
         pinned = False
 
     specs = {"Date": date_spec}
-    if n_sessions > 1:
-        # au-delà de ~30 le décompte n'a plus de sens sur une diapo
-        # (animations quotidiennes : « 1640 séances à venir »)
-        specs["Séances"] = ("Séances régulières" if n_sessions > 30
-                            else f"{n_sessions} séances à venir")
     if dur:
         specs["Durée"] = dur
     if lieu:

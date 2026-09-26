@@ -34,9 +34,13 @@ class GeneralTabMixin:
         sett = QGroupBox("Réglages")
         f = QFormLayout(sett)
         f.setLabelAlignment(Qt.AlignRight)
-        self.interval = QSpinBox(minimum=0, maximum=999,
-                                 suffix=" h (0 = off)")
+        self.interval = QSpinBox(minimum=0, maximum=720,
+                                 suffix=" min (0 = off)")
+        self.interval.setSingleStep(5)
         self.interval.setFixedWidth(160)
+        self.sched_times = QLineEdit()
+        self.sched_times.setPlaceholderText("ex. 06:00, 18:30")
+        self.sched_times.setFixedWidth(190)
         # limitation des diapos : nombre, horizon en jours, ou date
         self.limit_mode = QComboBox()
         self.limit_mode.setFixedWidth(190)
@@ -80,6 +84,7 @@ class GeneralTabMixin:
         prow.addWidget(self.portrait_fmt)
         prow.addStretch(1)
         f.addRow("Rafraîchissement auto", self.interval)
+        f.addRow("… et/ou à heures fixes", self.sched_times)
         f.addRow("Diapos générées", row)
         f.addRow("Résolution", self.res)
         f.addRow("Layouts générés", self.gen_ls)

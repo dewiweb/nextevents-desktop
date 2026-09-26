@@ -65,6 +65,7 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
         self._log_ref = None
         self._n_slides = 0
         self._sched_interval = 0
+        self._sched_times = ""
         self._io_tick = 0
         self._gal_gen = 0
         self._gal_seen = set()
@@ -175,8 +176,10 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
     def _collect(self):
         """Lit les widgets → dict de réglages (mêmes clés que la webui)."""
         s = load_settings()
+        s.pop("interval_hours", None)  # remplacé par interval_min
         s.update(
-            interval_hours=self.interval.value(),
+            interval_min=self.interval.value(),
+            sched_times=self.sched_times.text().strip(),
             max_events=self.maxev.value(),
             limit_mode=self.limit_mode.currentData(),
             limit_days=self.limit_days.value(),
@@ -304,7 +307,9 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
 
     def _load(self):
         s = load_settings()
-        self.interval.setValue(s["interval_hours"])
+        from nextevents.runner import _interval_min
+        self.interval.setValue(_interval_min(s))
+        self.sched_times.setText(s.get("sched_times") or "")
         self.maxev.setValue(s["max_events"])
         i = self.limit_mode.findData(s.get("limit_mode") or "count")
         self.limit_mode.setCurrentIndex(max(i, 0))
@@ -419,7 +424,10 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
         if self._io_tick >= 10 or was != running:
             self._io_tick = 0
             self._n_slides = len(slides())
-            self._sched_interval = load_settings()["interval_hours"]
+            s = load_settings()
+            from nextevents.runner import _interval_min
+            self._sched_interval = _interval_min(s)
+            self._sched_times = (s.get("sched_times") or "").strip()
             if running:
                 self._gallery_incremental()
         lr = state["last_run"]
@@ -436,9 +444,14 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
         self.status_chip.setStyleSheet(
             "color:#f6e3bb" if running else
             "color:#c99483" if err else "")
-        h = self._sched_interval
+        bits = []
+        m = self._sched_interval
+        if m:
+            bits.append(f"{m} min" if m < 60 else f"{m//60} h")
+        if self._sched_times:
+            bits.append(self._sched_times)
         self.sched_lbl.setText(
-            f"auto : toutes les {h} h" if h else "auto : off")
+            "auto : " + " + ".join(bits) if bits else "auto : off")
 
     def _open_dir(self, path):
         import subprocess, sys
