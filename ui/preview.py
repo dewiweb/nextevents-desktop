@@ -28,15 +28,17 @@ def preview_image(parent, path, title):
     # un seul aperçu à la fois : un dialogue non modal pouvait rester
     # ouvert derrière la fenêtre — le suivant s'ouvrait dessous et
     # l'utilisateur revoyait la diapo qu'il venait de « fermer ».
-    # Pas de WindowModal : une fenêtre modale/transiente ne passe pas
-    # plein écran sur plusieurs WM Linux (F11 muet).
+    # Pas de WindowModal ni de dialog transient : une fenêtre
+    # modale/transient-for ne passe pas plein écran sur plusieurs WM
+    # Linux (F11 muet) — Qt.Window fait de l'aperçu une fenêtre
+    # top-level à part entière, tout en restant détruite avec le parent.
     old = getattr(parent, "_preview_dlg", None)
     if old is not None:
         try:
             old.close()      # wrapper valide seulement s'il est ouvert
         except RuntimeError:
             pass             # déjà détruit (WA_DeleteOnClose)
-    d = QDialog(parent)
+    d = QDialog(parent, Qt.Window)
     d.setAttribute(Qt.WA_DeleteOnClose)
     d.setWindowTitle(title + "  ·  F11 plein écran")
     d.setStyleSheet("background:#000")
