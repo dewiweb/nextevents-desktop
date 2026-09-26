@@ -51,7 +51,13 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
     def __init__(self, tray_ok, icon_path):
         super().__init__()
         self.setWindowTitle("Nextevents")
-        self.resize(1180, 860)
+        # taille initiale bornée par l'écran : un poste en 1366×768
+        # recevait une fenêtre de 860 px — plus haute que la zone utile
+        from PySide6.QtWidgets import QApplication
+        scr = QApplication.primaryScreen().availableGeometry()
+        self.resize(min(1180, int(scr.width() * 0.92)),
+                    min(860, int(scr.height() * 0.92)))
+        self.setMinimumSize(760, 460)
         self._tray_ok = tray_ok
         self._icon_path = icon_path
         self._slideshows = []

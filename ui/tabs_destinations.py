@@ -8,8 +8,9 @@ import threading
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QCheckBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
-    QLabel, QLineEdit, QPushButton, QSpinBox, QVBoxLayout, QWidget,
+    QCheckBox, QFileDialog, QFormLayout, QFrame, QGroupBox,
+    QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea,
+    QSpinBox, QVBoxLayout, QWidget,
 )
 
 from nextevents.settings import OUT_DIR, load_settings
@@ -19,7 +20,16 @@ from .style import _pw
 class DestinationsTabMixin:
 
     def _destinations_tab(self):
+        # scroll comme l'onglet Général : trois groupes empilés, le
+        # bloc SMB du bas est hors d'atteinte sans ça sur petit écran
+        outer = QWidget()
+        outer_lay = QVBoxLayout(outer)
+        outer_lay.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea(widgetResizable=True)
+        scroll.setFrameShape(QFrame.NoFrame)
         w = QWidget()
+        scroll.setWidget(w)
+        outer_lay.addWidget(scroll)
         lay = QVBoxLayout(w)
         lay.setContentsMargins(18, 14, 18, 14)
         lay.setSpacing(14)
@@ -126,7 +136,7 @@ class DestinationsTabMixin:
         f.addRow(row)
         lay.addWidget(smb)
         lay.addStretch(1)
-        return w
+        return outer
 
     def _test(self, proto):
         self._save()

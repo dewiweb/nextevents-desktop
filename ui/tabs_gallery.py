@@ -11,9 +11,9 @@ from PySide6.QtGui import (
     QDesktopServices, QKeySequence, QPixmap, QShortcut,
 )
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QFileDialog, QGroupBox, QHBoxLayout, QLabel,
-    QListWidget, QListWidgetItem, QPushButton, QSpinBox, QTabWidget,
-    QVBoxLayout, QWidget,
+    QComboBox, QDialog, QFileDialog, QFrame, QGroupBox, QHBoxLayout,
+    QLabel, QListWidget, QListWidgetItem, QPushButton, QScrollArea,
+    QSpinBox, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from nextevents.runner import slides, slides_portrait
@@ -25,8 +25,17 @@ class GalleryTabMixin:
 
     def _gallery_tab(self):
         """Un sous-onglet par orientation — même organisation que le
-        dossier de sortie : landscape/ et portrait/."""
+        dossier de sortie : landscape/ et portrait/.
+        Scroll global : la barre d'actions et le groupe Lecture restent
+        atteignables quand la fenêtre est plus courte que le contenu."""
+        outer = QWidget()
+        outer_lay = QVBoxLayout(outer)
+        outer_lay.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea(widgetResizable=True)
+        scroll.setFrameShape(QFrame.NoFrame)
         w = QWidget()
+        scroll.setWidget(w)
+        outer_lay.addWidget(scroll)
         lay = QVBoxLayout(w)
         lay.setContentsMargins(18, 14, 18, 14)
         lay.setSpacing(14)
@@ -66,11 +75,12 @@ class GalleryTabMixin:
             pv.setSpacing(12)
 
             play = QGroupBox("Lecture")
-            h = QHBoxLayout(play)
+            pv2 = QVBoxLayout(play)
+            h = QHBoxLayout()
             delay = QSpinBox(minimum=2, maximum=3600, suffix=" s")
             delay.setFixedWidth(110)
             trans = QComboBox()
-            trans.setFixedWidth(160)
+            trans.setFixedWidth(150)
             trans.addItem("Aucune", "none")
             trans.addItem("Fondu", "fade")
             trans.addItem("Glissement", "slide")
@@ -78,7 +88,7 @@ class GalleryTabMixin:
                             suffix=" ms")
             tdur.setFixedWidth(110)
             screen = QComboBox()
-            screen.setFixedWidth(200)
+            screen.setFixedWidth(210)
             screen.addItem("Écran principal", -1)
             # écran de diffusion sur les postes multi-sorties — l'index
             # stocké dans ss_screen* est celui de QApplication.screens()
@@ -97,14 +107,20 @@ class GalleryTabMixin:
             h.addWidget(trans)
             h.addWidget(QLabel("Durée"))
             h.addWidget(tdur)
-            h.addWidget(QLabel("Affichage"))
-            h.addWidget(screen)
             h.addStretch(1)
+            pv2.addLayout(h)
+            # deuxième ligne : une seule rangée de ~900 px coupait le
+            # bouton sur les fenêtres étroites (petit écran)
+            h2 = QHBoxLayout()
+            h2.addWidget(QLabel("Affichage"))
+            h2.addWidget(screen)
+            h2.addStretch(1)
             b = QPushButton("Ouvrir le slideshow")
             b.setProperty("ghost", True)
             b.clicked.connect(lambda _=False, p=bool(sfx):
                               self._open_slideshow(p))
-            h.addWidget(b)
+            h2.addWidget(b)
+            pv2.addLayout(h2)
             pv.addWidget(play)
 
             gal = QListWidget()
@@ -122,6 +138,9 @@ class GalleryTabMixin:
             gal.setWordWrap(False)
             gal.setTextElideMode(Qt.ElideMiddle)
             gal.setSpacing(8)
+            # plancher bas : la liste peut rétrécir, le scroll de page
+            # prend le relais plutôt que de couper le groupe Lecture
+            gal.setMinimumHeight(150)
             gal.itemDoubleClicked.connect(self._preview_slide)
             QShortcut(QKeySequence.Delete, gal,
                       context=Qt.WidgetWithChildrenShortcut,
@@ -131,7 +150,7 @@ class GalleryTabMixin:
             inner.addTab(page, label)
 
         lay.addWidget(inner, 1)
-        return w
+        return outer
 
     # ———————————————————— slideshow ————————————————————
 
