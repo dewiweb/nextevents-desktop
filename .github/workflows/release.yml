@@ -64,8 +64,12 @@ jobs:
         working-directory: dist
         run: |
           Expand-Archive -Path "${{ env.ZIP_NAME }}" -DestinationPath smoke-test
-          & ".\smoke-test\nextevents\nextevents.exe" --diag
-          if ($LASTEXITCODE -ne 0) { throw "l'exe a quitté avec le code $LASTEXITCODE" }
+          # exe fenêtré : "&" ne bloque PAS (subsystem GUI détaché) —
+          # Start-Process + WaitForExit pour attendre la fin du diag
+          $p = Start-Process -FilePath ".\smoke-test\nextevents\nextevents.exe" `
+            -ArgumentList "--diag" -PassThru
+          if (-not $p.WaitForExit(120000)) { $p.Kill(); throw "--diag a dépassé 120 s" }
+          if ($p.ExitCode -ne 0) { throw "l'exe a quitté avec le code $($p.ExitCode)" }
           $log = "smoke-test\nextevents\data\diag.log"
           if (-not (Test-Path $log)) { throw "diag.log absent — l'exe n'a pas démarré" }
           Get-Content $log -Tail 15
