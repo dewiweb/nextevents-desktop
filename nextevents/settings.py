@@ -55,13 +55,16 @@ DEFAULTS = {
     "out_dir": "",
     "close_to_tray": 1,
     "start_minimized": 0,
+    "autostart_app": 0,      # lance l'app à l'ouverture de session OS
     "autostart_slideshow": "none",
     "ss_delay": 8,
     "ss_transition": "fade",
     "ss_tdur": 1500,
+    "ss_screen": -1,         # écran du slideshow (-1 = principal)
     "ss_delay_p": 8,
     "ss_transition_p": "fade",
     "ss_tdur_p": 1500,
+    "ss_screen_p": -1,
 }
 
 # état runtime du serveur (génération en cours, journal, dernier run)

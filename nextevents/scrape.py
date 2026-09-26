@@ -121,9 +121,8 @@ session.headers["User-Agent"] = UA
 
 
 def get(url):
-    r = session.get(url, timeout=30)
-    r.raise_for_status()
-    return r
+    from .net import get as _get
+    return _get(url, session=session)
 
 
 def _color_from_classes(classes, prefix):

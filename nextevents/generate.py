@@ -219,16 +219,35 @@ def generate(out_dir=None, max_events=0, pages=99, cfg=None, size=DEFAULT_SIZE):
         _render_set(events, fonts, out / "portrait",
                     portrait_size(size, fmt), portrait_key(fmt))
 
+    # synchros : une destination en échec ne doit pas faire rater la
+    # génération — les diapos locales sont bonnes, l'erreur part en
+    # warning dans le journal (visible dans le statut de l'app)
+    failed = []
     if cfg:
         if cfg.get("ftp_host"):
             print("6/6 Envoi FTP…")
-            sync_ftp(out, cfg)
+            try:
+                sync_ftp(out, cfg)
+            except Exception as e:
+                print(f"  ⚠ synchro FTP KO : {e}")
+                failed.append("FTP")
         if cfg.get("smb_host"):
             print("    Envoi SMB…")
-            sync_smb(out, cfg)
+            try:
+                sync_smb(out, cfg)
+            except Exception as e:
+                print(f"  ⚠ synchro SMB KO : {e}")
+                failed.append("SMB")
         if cfg.get("local_dir"):
             print("    Copie dossier local…")
-            sync_local(out, cfg)
+            try:
+                sync_local(out, cfg)
+            except Exception as e:
+                print(f"  ⚠ copie locale KO : {e}")
+                failed.append("dossier local")
+    if failed:
+        print(f"⚠ synchro(s) en échec : {', '.join(failed)} "
+              "— les diapos locales sont à jour")
 
     n = len(pngs) + len(list((out / "portrait").glob("*.png")))
     print(f"\nTerminé : {n} diapos dans {out}/")

@@ -62,7 +62,7 @@ class _Slide(QWidget):
 class SlideshowWindow(QMainWindow):
     img_ready = Signal(str, object)  # chemin, QImage décodée en worker
 
-    def __init__(self, portrait=False):
+    def __init__(self, portrait=False, screen_idx=-1):
         super().__init__()
         self.portrait = portrait
         self.setWindowTitle("Nextevents — slideshow"
@@ -70,6 +70,7 @@ class SlideshowWindow(QMainWindow):
         self.setStyleSheet("background:#000")
         self.setCursor(Qt.BlankCursor)
         self.setMouseTracking(True)
+        self._screen_idx = screen_idx
 
         self._names, self._paths, self._idx = [], [], -1
         self._fp = []
@@ -86,8 +87,7 @@ class SlideshowWindow(QMainWindow):
 
         # état vide : aucune diapo générée
         from PySide6.QtWidgets import QLabel as _L
-        self._empty = _L("Aucune diapo — en attente d'une génération",
-                         self)
+        self._empty = _L("", self)
         self._empty.setStyleSheet(
             "color:#8f8c8a;font-size:28px;background:transparent")
         self._empty.setAlignment(Qt.AlignCenter)
@@ -109,10 +109,30 @@ class SlideshowWindow(QMainWindow):
         self._reloader = QTimer(self, interval=15000,
                                 timeout=self._reload)
         self._reloader.start()
+        self._apply_screen()
         self.showFullScreen()
         # différé : le premier _show doit voir la géométrie plein écran
         # (sinon la transition "glissement" part d'une largeur fausse)
         QTimer.singleShot(0, self._reload)
+
+    def _target_screen(self):
+        """QScreen choisi par le réglage ss_screen*, ou None pour le
+        comportement par défaut (écran principal)."""
+        if self._screen_idx < 0:
+            return None
+        from PySide6.QtWidgets import QApplication
+        screens = QApplication.screens()
+        return (screens[self._screen_idx]
+                if self._screen_idx < len(screens) else None)
+
+    def _apply_screen(self):
+        """Bascule le plein écran sur l'écran configuré — un poste de
+        diffusion a typiquement un écran de contrôle + un écran public
+        (le fullscreen allait toujours sur le principal)."""
+        target = self._target_screen()
+        if target is not None:
+            self.winId()  # crée le handle natif — requis avant setScreen
+            self.windowHandle().setScreen(target)
 
     # ——— liste et réglages ———
 
@@ -130,11 +150,26 @@ class SlideshowWindow(QMainWindow):
         self._delay = s.get(f"ss_delay{sfx}") or 8
         self._trans = s.get(f"ss_transition{sfx}") or "fade"
         self._tdur = s.get(f"ss_tdur{sfx}") or 1500
+        # écran : le réglage est re-lu comme les autres — un poste
+        # re-câblé (ou un écran remplacé) bascule au prochain poll
+        new_idx = int(s.get(f"ss_screen{sfx}") or -1)
+        if new_idx != self._screen_idx:
+            self._screen_idx = new_idx
+            self._apply_screen()
+            self.showFullScreen()
         files = self._files()
         names = [p.name for p in files]
         # nom + mtime : une régénération réécrivant le même fichier
         # doit quand même rafraîchir l'image affichée
         fp = [(p.name, p.stat().st_mtime_ns) for p in files]
+        out = resolve_out_dir()
+        if not out.exists():
+            self._empty.setText(
+                "Dossier de sortie introuvable — "
+                "vérifiez le réglage ou le lecteur réseau")
+        else:
+            self._empty.setText(
+                "Aucune diapo — en attente d'une génération")
         self._empty.setVisible(not names)
         self._empty.raise_()
         if fp == self._fp:

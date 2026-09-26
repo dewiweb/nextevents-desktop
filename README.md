@@ -27,15 +27,23 @@ Tout est local — aucun serveur web, aucun navigateur externe :
   page) — `WheelGuard` installé au niveau `QApplication`
 - **`ui/slideshow.py`** — player plein écran natif (fondu/glissement,
   pause au clic, rechargement auto des diapos et réglages) — remplace
-  l'ancien slideshow HTML/JS
+  l'ancien slideshow HTML/JS. Choix de l'écran de diffusion par
+  orientation (postes multi-sorties)
 - **Rendu** : Chromium *headless shell* embarqué (appairé au driver
   Playwright) — immunisé aux mises à jour de navigateur sur les postes.
   Pour forcer un navigateur système : `NEXTEVENTS_BROWSER_CHANNEL=msedge`
 - **Tray** : `QSystemTrayIcon` natif (Win32 / SNI) — fermer la fenêtre
   réduit en icône, double-clic la réaffiche, menu complet (générer,
-  dossier de destination, ouvrir les diapos, quitter)
+  diaporamas, dossier de destination, ouvrir les diapos, quitter)
 - **Instance unique** : un second lancement remet la fenêtre existante
   au premier plan au lieu de démarrer un processus concurrent
+- **Autostart** : case « Lancer l'application à l'ouverture de session »
+  (Run key Windows / autostart freedesktop Linux) — un poste
+  d'affichage revient tout seul après un redémarrage
+- **Robustesse** : réseau avec retry, synchros isolées (une destination
+  KO ne rate pas la génération), `app.log` rotatif, crashs tracés dans
+  `data/crash.log` + rappel au redémarrage, vérification de mise à
+  jour (releases GitHub) depuis l'onglet Général
 - Données dans `./data/` à côté de l'exe/AppImage (diapos, réglages,
   cache fontes/images, `app.log`) — portable, copiable tel quel ;
   repli sur `~/.nextevents` si l'emplacement est en lecture seule
@@ -153,6 +161,11 @@ trousseau au premier enregistrement des réglages.
 
 ## Usage (utilisateur final)
 
+> **Premier lancement Windows** : SmartScreen peut afficher « Windows a
+> protégé votre ordinateur » (binaire non signé — voir la section
+> [Antivirus](#antivirus--réputation-symantec-smartscreen)). Cliquer
+> « Informations complémentaires » → « Exécuter quand même ».
+
 Lancer `nextevents.exe` / l'AppImage → fenêtre principale :
 
 - **Général** — réglages (intervalle, nb d'événements, résolution,
@@ -178,7 +191,13 @@ Lancer `nextevents.exe` / l'AppImage → fenêtre principale :
 
 Fermer la fenêtre réduit l'app dans la zone de notification ; double-
 clic sur l'icône la réaffiche. Clic droit : Afficher / Générer
-maintenant / Dossier de destination… / Ouvrir les diapos / Quitter.
+maintenant / Diaporama paysage / Diaporama portrait / Dossier de
+destination… / Ouvrir les diapos / Quitter.
+
+Sur un poste d'affichage : cocher **« Lancer l'application à
+l'ouverture de session »** (onglet Général → Application) pour que
+l'app survive aux redémarrages, et choisir l'écran de diffusion dans
+Galerie → Lecture.
 
 L'infobulle de l'icône affiche le nombre de diapos et l'état. Journal
 applicatif : `data/app.log`. Diagnostic du rendu : `--diag` →

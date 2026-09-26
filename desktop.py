@@ -72,8 +72,37 @@ except ImportError:
 if getattr(sys, "frozen", False):
     # Mode fenêtré : pas de console — journal dans data/app.log (UTF-8,
     # évite aussi les crashs d'encodage cp1252 sur les symboles du journal)
-    _log = open(DATA / "app.log", "a", encoding="utf-8", buffering=1)
+    _log_path = DATA / "app.log"
+    try:
+        # rotation bornée : >2 Mo → app.log.1 (l'ancien .1 est écrasé) —
+        # un poste qui tourne des mois ne remplit pas son disque de logs
+        if _log_path.stat().st_size > 2 * 1024 * 1024:
+            _log_path.replace(_log_path.with_name(_log_path.name + ".1"))
+    except OSError:
+        pass
+    _log = open(_log_path, "a", encoding="utf-8", buffering=1)
     sys.stdout = sys.stderr = _log
+
+    # crashs : traceback Python non intercepté → data/crash.log (signalé
+    # au prochain démarrage par ui.app) ; fautes natives Qt (segfault…)
+    # → faulthandler dans le même journal, sinon elles restent muettes
+    import faulthandler
+    faulthandler.enable(_log)
+    _orig_hook = sys.excepthook
+
+    def _crash(exc_type, exc, tb):
+        try:
+            import datetime
+            import traceback
+            with open(DATA / "crash.log", "a", encoding="utf-8") as f:
+                f.write(datetime.datetime.now().isoformat(
+                    timespec="seconds") + "\n")
+                traceback.print_exception(exc_type, exc, tb, file=f)
+        except OSError:
+            pass
+        _orig_hook(exc_type, exc, tb)
+
+    sys.excepthook = _crash
 
 
 def _diag():

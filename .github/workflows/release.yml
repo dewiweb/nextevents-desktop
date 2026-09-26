@@ -15,6 +15,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -22,8 +23,22 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Resolve tag
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($env:GITHUB_REF_TYPE -ne "tag") { $tag = "${{ inputs.tag }}" }
+          echo "TAG=$tag" >> $env:GITHUB_ENV
+
       - name: Install dependencies
         run: pip install -r requirements-desktop.txt
+
+      - name: Run smoke tests
+        run: python -m unittest discover -s tests
+
+      - name: Generate version files from tag
+        # version.txt + nextevents/version.py dérivent du tag — plus de
+        # version figée à la main dans les métadonnées de l'exe
+        run: python tools/gen_version.py "${{ env.TAG }}"
 
       - name: Install Chromium headless shell (bundled)
         # BROWSERS_PATH=0 : installe dans playwright/driver/package/
@@ -38,10 +53,25 @@ jobs:
       - name: Package zip
         working-directory: dist
         run: |
-          $tag = "${{ github.ref_name }}"
-          if ($env:GITHUB_REF_TYPE -ne "tag") { $tag = "${{ inputs.tag }}" }
-          Compress-Archive -Path nextevents -DestinationPath "nextevents-windows-$tag.zip"
-          echo "ZIP_NAME=nextevents-windows-$tag.zip" >> $env:GITHUB_ENV
+          Compress-Archive -Path nextevents -DestinationPath "nextevents-windows-${{ env.TAG }}.zip"
+          echo "ZIP_NAME=nextevents-windows-${{ env.TAG }}.zip" >> $env:GITHUB_ENV
+
+      - name: Smoke test artifact
+        # l'exe est lancé en --diag : démarre, importe tout le code,
+        # teste le navigateur embarqué, écrit data/diag.log — un crash
+        # de démarrage (ex: tzdata manquant) fait échouer le build ici
+        # plutôt que chez l'utilisateur
+        working-directory: dist
+        run: |
+          Expand-Archive -Path "${{ env.ZIP_NAME }}" -DestinationPath smoke-test
+          & ".\smoke-test\nextevents\nextevents.exe" --diag
+          if ($LASTEXITCODE -ne 0) { throw "l'exe a quitté avec le code $LASTEXITCODE" }
+          $log = "smoke-test\nextevents\data\diag.log"
+          if (-not (Test-Path $log)) { throw "diag.log absent — l'exe n'a pas démarré" }
+          Get-Content $log -Tail 15
+          if (-not (Select-String -Path $log -Pattern "launch .* OK")) {
+            throw "aucun navigateur ne démarre dans l'exe packagé"
+          }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -60,6 +90,7 @@ jobs:
     # ubuntu-22.04 = glibc la plus ancienne supportée : l'AppImage
     # produite tourne sur toute distro avec glibc >= 2.35
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -67,8 +98,20 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Resolve tag
+        run: |
+          tag="${{ github.ref_name }}"
+          if [ "${{ github.ref_type }}" != "tag" ]; then tag="${{ inputs.tag }}"; fi
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+
       - name: Install dependencies
         run: pip install -r requirements-desktop.txt
+
+      - name: Run smoke tests
+        run: python -m unittest discover -s tests
+
+      - name: Generate version files from tag
+        run: python tools/gen_version.py "$TAG"
 
       - name: Install Chromium headless shell (bundled) + libs système
         # install-deps : les libs du headless shell doivent être
@@ -90,10 +133,19 @@ jobs:
 
       - name: Build AppImage
         run: |
-          tag="${{ github.ref_name }}"
-          if [ "${{ github.ref_type }}" != "tag" ]; then tag="${{ inputs.tag }}"; fi
-          appimage/build-appimage.sh "$tag"
-          echo "APPIMAGE_NAME=nextevents-linux-$tag.AppImage" >> "$GITHUB_ENV"
+          appimage/build-appimage.sh "$TAG"
+          echo "APPIMAGE_NAME=nextevents-linux-$TAG.AppImage" >> "$GITHUB_ENV"
+
+      - name: Smoke test artifact
+        # --appimage-extract-and-run : pas besoin de FUSE sur le runner.
+        # L'AppImage écrit data/diag.log à côté du fichier .AppImage.
+        run: |
+          chmod +x "dist/$APPIMAGE_NAME"
+          timeout 120 "dist/$APPIMAGE_NAME" --appimage-extract-and-run --diag
+          test -f dist/data/diag.log || { echo "diag.log absent"; exit 1; }
+          tail -15 dist/data/diag.log
+          grep -q "launch .* OK" dist/data/diag.log || {
+            echo "aucun navigateur ne démarre dans l'AppImage"; exit 1; }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

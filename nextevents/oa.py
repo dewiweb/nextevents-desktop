@@ -21,7 +21,6 @@ import datetime
 import re
 from zoneinfo import ZoneInfo
 
-import requests
 from bs4 import BeautifulSoup
 
 from .scrape import (
@@ -330,9 +329,8 @@ def _map_legacy(e, series_map=None):
 # ———————————————————— fetch ————————————————————
 
 def _get(url, **kw):
-    r = requests.get(url, headers=UA, timeout=30, **kw)
-    r.raise_for_status()
-    return r
+    from .net import get
+    return get(url, headers=UA, **kw)
 
 
 def _resolve_uid(agenda):
