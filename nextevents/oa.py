@@ -260,7 +260,8 @@ def _map_v2(e, cat_opts, pub_opts, agenda, series_map=None):
     if isinstance(pub_ids, int):
         pub_ids = [pub_ids]
     pubs = [pub_opts.get(i) for i in pub_ids if i in pub_opts]
-    kws = [k for k in (e.get("keywords", {}).get("fr") or []) if k]
+    kws = [k for k in ((e.get("keywords") or {}).get("fr") or [])
+           if k]
     cond = (e.get("conditions") or {}).get("fr")
     acc = e.get("accessibility") or {}
     acc_codes = [k for k, v in acc.items() if v] \
@@ -306,7 +307,8 @@ def _map_legacy(e, series_map=None):
                 cat_value, cat_label = t.get("slug"), t.get("label")
             elif g.get("slug") == "publics":
                 pubs.append(t.get("label"))
-    kws = [k for k in (e.get("keywords", {}).get("fr") or []) if k]
+    kws = [k for k in ((e.get("keywords") or {}).get("fr") or [])
+           if k]
     cond = (e.get("conditions") or {}).get("fr")
     return _base_map(
         e, cat_value, cat_label, " · ".join(p for p in pubs if p), kws,
@@ -355,17 +357,21 @@ def _v2_events(agenda, key, series_map=None):
         elif f["field"] == "publics":
             pub_opts = {i: lbl for i, (_, lbl) in opts.items()}
 
-    today = datetime.date.today().isoformat()
-    events, offset = [], 0
+    # « en cours + à venir » (relative, pas timings[gte] qui exclut
+    # les événements en cours sans créneau futur) ; pagination par
+    # curseur after[] — offset n'est pas documenté en v2
+    events, after = [], None
     while True:
+        params = {"key": key, "size": 300, "detailed": 1,
+                  "relative[]": ["current", "upcoming"]}
+        if after:
+            params["after[]"] = after
         d = _get(f"{API}/agendas/{agenda}/events",
-                 params={"key": key, "size": 100, "offset": offset,
-                         "detailed": 1,
-                         "timings[gte]": today}).json()
-        events += d.get("events", [])
-        total = d.get("total", 0)
-        offset += len(d.get("events", [])) or 100
-        if not d.get("events") or offset >= total:
+                 params=params).json()
+        batch = d.get("events", [])
+        events += batch
+        after = d.get("after")
+        if not batch or not after:
             break
     # la liste omet `timings` quand il y en a trop (clubs récurrents
     # type rdv4c : ~40/an) — sans eux l'événement serait classé
