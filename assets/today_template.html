@@ -53,6 +53,7 @@ body{font-family:'Oldschool Grotesk',Arial,sans-serif;color:$light;
  border-radius:2em;padding:calc(12px*var(--k)) calc(36px*var(--k));
  font-size:calc(30px*var(--k));font-weight:500}
 h1{font-size:80px;font-weight:500;line-height:1.08;letter-spacing:-.01em;
+ color:$light;
  margin-top:calc(36px*var(--k));max-width:1700px;text-wrap:balance;
  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;
  overflow:hidden}
@@ -62,23 +63,29 @@ h1{font-size:80px;font-weight:500;line-height:1.08;letter-spacing:-.01em;
 .middle{flex:2;display:flex;flex-direction:column;align-items:center;
  justify-content:center;min-height:0}
 .spk-label{font-size:calc(26px*var(--k));font-weight:500;
- letter-spacing:.14em;text-transform:uppercase;color:$muted}
+ letter-spacing:.14em;text-transform:uppercase;
+ color:color-mix(in srgb,$accent 60%,$bg)}
 .speakers{margin-top:calc(26px*var(--k));display:flex;
  flex-direction:column;gap:calc(32px*var(--k));align-items:center;
  min-height:0}
 .speaker{display:flex;flex-direction:column;gap:calc(2px*var(--k));
  align-items:center}
-.speaker .name{font-size:calc(54px*var(--k));font-weight:500}
+.speaker .name{font-size:calc(54px*var(--k));font-weight:500;
+ color:$accent}
 .speaker .qual{font-size:calc(32px*var(--k));line-height:1.3;
- color:$muted;max-width:1400px}
+ color:color-mix(in srgb,$accent 55%,$bg);max-width:1400px}
 .mod{margin-top:auto;padding-top:calc(34px*var(--k));
- font-size:calc(34px*var(--k));color:$faint;
- border-top:1px solid rgba(239,234,230,.12);width:100%}
-.mod-line b{font-weight:500;color:$light}
+ font-size:calc(34px*var(--k));
+ color:color-mix(in srgb,$accent 45%,$bg);
+ border-top:1px solid color-mix(in srgb,$accent 25%,transparent);
+ width:100%}
+.mod-line b{font-weight:500;
+ color:color-mix(in srgb,$accent 85%,$bg)}
 .note-line{margin-top:calc(10px*var(--k));font-size:calc(24px*var(--k));
- color:$muted}
+ color:color-mix(in srgb,$accent 55%,$bg)}
 .access-line{margin-top:calc(10px*var(--k));
- font-size:calc(24px*var(--k));color:$faint}
+ font-size:calc(24px*var(--k));
+ color:color-mix(in srgb,$accent 40%,$bg)}
 .access-line::before{content:"◦ "}
 /* variante série (modèle com « Grands témoins » en sombre) :
    rond marine, titre clair majuscule — composition centrée conservée */
