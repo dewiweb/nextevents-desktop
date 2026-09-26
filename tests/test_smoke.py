@@ -86,6 +86,34 @@ class VersionTest(unittest.TestCase):
         self.assertFalse(version.newer_than_current("v0.4.9"))
 
 
+class UiCollisionTest(unittest.TestCase):
+    """Deux mixins ne doivent pas définir le même nom de méthode :
+    la MRO de MainWindow en masque une et les signaux Qt connectés à
+    `self.<nom>` tombent sur la mauvaise — silencieusement, car
+    PySide6 ignore les arguments excédentaires (bug constaté dans
+    openagenda-slides : _preview_slide doublé, le double-clic
+    galerie rendait le mauvais aperçu)."""
+
+    def test_no_shadowed_methods_between_mixins(self):
+        from ui import tabs_destinations, tabs_gallery, tabs_general
+        from ui import today
+        mixins = [tabs_general.GeneralTabMixin,
+                  tabs_destinations.DestinationsTabMixin,
+                  tabs_gallery.GalleryTabMixin,
+                  today.TodayTab]
+        seen, dup = {}, []
+        for cls in mixins:
+            for name, fn in vars(cls).items():
+                if name.startswith("__") or not callable(fn):
+                    continue
+                if name in seen:
+                    dup.append(f"{name} : {seen[name]} vs "
+                               f"{cls.__name__}")
+                else:
+                    seen[name] = cls.__name__
+        self.assertEqual(dup, [])
+
+
 class AutostartTest(unittest.TestCase):
 
     def test_cmd_known(self):
