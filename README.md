@@ -87,27 +87,52 @@ Ordre fixe `SPEC_ORDER`, chaque ligne absente est omise :
 | Spec | Contenu / règles |
 |---|---|
 | **Date** | `JJ/MM/AA à HHh` (séance unique) · `Du … au …` (multi-jours) · `Prochaine séance : …` (récurrent, > 1 séance à venir) · `Exposition permanente` |
-| **Séances** | `N séances à venir` (≤ 30) · `Séances régulières` (> 30 — le décompte n'a plus de sens, ex. animations quotidiennes) |
 | **Durée** | `1h30` — masquée si ≥ 4 h (plage d'ouverture, pas une séance) |
 | **Lieu** | omis pour les « Temps fort » multi-sites |
 | **Tarif** | texte OA `conditions` ou carte site |
 | **Public** | `Familles · dès 8 ans` (schéma OA `publics` + `age.min`) |
 | **Accessibilité** | keywords OA `def*` ∪ mentions dans le texte |
 
-### Classification date (OA)
+### D'où viennent les horaires
 
-La durée **médiane** des timings tranche le type d'événement :
+L'horaire n'est jamais saisi : il est lu depuis la source, puis
+classé selon le *motif* des séances — pas selon la catégorie, mais
+en pratique chaque catégorie a un motif dominant :
 
-- timings = plages d'ouverture (médiane ≥ 4 h) sur > 300 j et ≥ 50 %
-  des jours → **Exposition permanente** (pas de compteur ni durée)
-- séances courtes très nombreuses (Merlin : 1640 × 1 h) → récurrent,
-  « Prochaine séance » + « Séances régulières »
-- jours contigus (≥ 80 % du span, expo temporaire/temps fort) →
-  « Du … au … », épinglé en tête tant qu'il est en cours
-- sinon → séance unique ou récurrente classique
+- **Site** (repli) : la spec `Date` de la carte (`scrape.parse_card`
+  lit les `p.v-event__spec` par icône) — texte `JJ/MM/AA à HHhMM`
+  ou `Du JJ/MM/AA au JJ/MM/AA`, parsé par `event_dates`. Le site
+  éclate chaque séance en carte séparée : `group_sessions` les
+  refusionne par titre normalisé et garde la plus proche.
+- **OpenAgenda** : `timings[].begin/end` (ISO, UTC) → convertis en
+  Europe/Paris (`_local`, `tzdata` embarqué sous Windows). Durée
+  affichée = fin − début si < 4 h.
 
-Le site éclate chaque séance en carte : `group_sessions` les
-refusionne par titre — même sémantique « Prochaine séance ».
+### Classification par motif (OA `_date_spec`)
+
+La durée **médiane** et la densité des timings tranchent le libellé :
+
+- plages d'ouverture (médiane ≥ 4 h) sur > 300 j couvrant ≥ 50 %
+  des jours → **Exposition permanente**
+- jours contigus : ≥ 80 % du span occupé **et** (plages d'ouverture
+  ou span ≤ 120 j) → **Du … au …**, épinglé tant qu'il est en cours
+- plusieurs séances futures éparses → **Prochaine séance : JJ/MM/AA
+  à HHh**
+- une seule → **JJ/MM/AA à HHh**
+- aucun timing → le texte éditorial `dateRange` si présent, sinon
+  « Exposition permanente »
+
+### Motif typique par catégorie
+
+| Catégorie | Horaire affiché |
+|---|---|
+| Rencontre, Concert, Spectacle, Projection | séance(s) ponctuelle(s) → `JJ/MM/AA à HHh`, ou `Prochaine séance : …` si l'événement tourne (ex. pièce jouée 3 soirs) |
+| Animation, Atelier, Visite, RDV4C | récurrent quotidien/hebdo → `Prochaine séance : …` (milliers de créneaux possibles côté OA — ex. planétarium : 1640 séances) |
+| Temps fort | multi-jours → `Du … au …`, **épinglé** en tête du diaporama tant qu'il est en cours |
+| Exposition | `Exposition permanente` (ouverture quotidienne) ou `Du … au …` (expo temporaire) |
+
+Le tri du diaporama suit `_dt` (prochaine occurrence) ; les événements
+épinglés (`pinned`) passent devant.
 
 ## Séries éditoriales
 
