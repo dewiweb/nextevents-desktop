@@ -62,7 +62,7 @@ class _Slide(QWidget):
 class SlideshowWindow(QMainWindow):
     img_ready = Signal(str, object)  # chemin, QImage décodée en worker
 
-    def __init__(self, portrait=False, screen_idx=-1):
+    def __init__(self, portrait=False, screen_idx=-1, start_at=None):
         super().__init__()
         self.portrait = portrait
         self.setWindowTitle("Nextevents — slideshow"
@@ -71,6 +71,7 @@ class SlideshowWindow(QMainWindow):
         self.setCursor(Qt.BlankCursor)
         self.setMouseTracking(True)
         self._screen_idx = screen_idx
+        self._start_at = start_at  # basename d'une diapo (menu galerie)
 
         self._names, self._paths, self._idx = [], [], -1
         self._fp = []
@@ -185,7 +186,10 @@ class SlideshowWindow(QMainWindow):
         self._idx = (self._names.index(cur) if cur in self._names
                      else -1)
         if self._idx < 0 and self._names:
-            self._show(0)
+            i = (self._names.index(self._start_at)
+                 if self._start_at in self._names else 0)
+            self._start_at = None
+            self._show(i)
             self._arm()
         elif same_names and 0 <= self._idx < len(self._paths):
             p = self._paths[self._idx]

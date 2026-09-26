@@ -154,19 +154,23 @@ class GalleryTabMixin:
 
     # ———————————————————— slideshow ————————————————————
 
-    def _open_slideshow(self, portrait):
+    def _open_slideshow(self, portrait, start_at=None):
         # une seule fenêtre par orientation : re-solliciter lève
         # l'existante plutôt que d'empiler les plein écran
         for w in self._slideshows:
             if w.portrait == portrait:
                 w._reload()
+                if start_at and start_at in w._names:
+                    w._show(w._names.index(start_at))
+                    w._arm()
                 w.showFullScreen()
                 w.raise_()
                 w.activateWindow()
                 return
         sfx = "_p" if portrait else ""
         scr = int(load_settings().get(f"ss_screen{sfx}") or -1)
-        win = SlideshowWindow(portrait=portrait, screen_idx=scr)
+        win = SlideshowWindow(portrait=portrait, screen_idx=scr,
+                              start_at=start_at)
         win.setAttribute(Qt.WA_DeleteOnClose)
         self._slideshows.append(win)
         win.destroyed.connect(
@@ -204,33 +208,39 @@ class GalleryTabMixin:
     # ———————————————————— galerie ————————————————————
 
     def _preview_slide(self, it):
-        """Aperçu intégré d'une diapo de la galerie (double-clic)."""
+        """Aperçu d'une diapo (double-clic) — F11 plein écran, Échap
+        fermer. Le widget _Slide re-met à l'échelle à chaque resize,
+        l'image est donc décodée à la résolution d'écran : nette en
+        plein écran comme en fenêtré."""
         rel = it.data(Qt.UserRole)
         if not rel:
             return
         p = resolve_out_dir() / rel
         scr = self.screen().availableGeometry()
-        # décodage direct à la taille d'affichage : un PNG UHD complet
-        # prendrait ~150 ms sur le thread GUI
         from PySide6.QtGui import QImageReader
         r = QImageReader(str(p))
         sz = r.size()
         if sz.isValid():
-            sz.scale(scr.width() * 3 // 4, scr.height() * 3 // 4,
-                     Qt.KeepAspectRatio)
+            sz.scale(scr.width(), scr.height(), Qt.KeepAspectRatio)
             r.setScaledSize(sz)
         img = r.read()
         if img.isNull():
             return
+        from .slideshow import _Slide
         d = QDialog(self)
         d.setAttribute(Qt.WA_DeleteOnClose)
-        d.setWindowTitle(it.text())
+        d.setWindowTitle(it.text() + "  ·  F11 plein écran")
+        d.setStyleSheet("background:#000")
+        d.resize(scr.width() * 3 // 4, scr.height() * 3 // 4)
         v = QVBoxLayout(d)
         v.setContentsMargins(0, 0, 0, 0)
-        lbl = QLabel()
-        lbl.setPixmap(QPixmap.fromImage(img))
-        v.addWidget(lbl)
-        d.exec()
+        sl = _Slide(d)
+        sl.set_slide(None, img)
+        v.addWidget(sl)
+        QShortcut(QKeySequence("F11"), d, activated=lambda:
+                  d.showNormal() if d.isFullScreen()
+                  else d.showFullScreen())
+        d.show()
 
     def _refresh_gallery(self):
         """Recharge la liste puis décode les vignettes dans un thread —
@@ -401,7 +411,9 @@ class GalleryTabMixin:
                 "Génération en cours — régénération impossible", 4000)
             return
         stem = Path(rel).stem
-        portrait = rel.startswith("portrait/")
+        # Path(rel).parent.name : rel contient le séparateur natif
+        # (backslash sous Windows) — startswith("portrait/") raté là
+        portrait = Path(rel).parent.name == "portrait"
         sub = Path(rel).parent
         if str(sub) == ".":  # rel ancien format sans sous-dossier
             sub = Path("portrait" if portrait else "landscape")
@@ -453,7 +465,7 @@ class GalleryTabMixin:
                 sz = r.size()
                 if sz.isValid():
                     sz.scale(160, 285, Qt.KeepAspectRatio) \
-                        if rel.startswith("portrait/") else \
+                        if Path(rel).parent.name == "portrait" else \
                         sz.scale(280, 160, Qt.KeepAspectRatio)
                     r.setScaledSize(sz)
                 img = r.read()
@@ -467,9 +479,14 @@ class GalleryTabMixin:
         it = gal.itemAt(pos)
         m = QMenu(self)
         if it and it.data(Qt.UserRole):
+            rel = it.data(Qt.UserRole)
             m.addAction("Aperçu").triggered.connect(
                 lambda: self._preview_slide(it))
-            ev = self._event_for(Path(it.data(Qt.UserRole)).stem)
+            m.addAction("Diaporama depuis cette diapo").triggered\
+                .connect(lambda: self._open_slideshow(
+                    Path(rel).parent.name == "portrait",
+                    start_at=Path(rel).name))
+            ev = self._event_for(Path(rel).stem)
             if ev:
                 m.addAction("Régénérer cette diapo").triggered.connect(
                     lambda: self._regen_slide(it))
