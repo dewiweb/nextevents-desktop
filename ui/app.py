@@ -98,6 +98,11 @@ def run(icon_path):
     menu.addAction("Afficher").triggered.connect(_show)
     menu.addSeparator()
     menu.addAction("Générer maintenant").triggered.connect(_gen)
+    menu.addAction("Diaporama paysage").triggered.connect(
+        lambda: win._open_slideshow(False))
+    menu.addAction("Diaporama portrait").triggered.connect(
+        lambda: win._open_slideshow(True))
+    menu.addSeparator()
     menu.addAction("Dossier de destination…").triggered.connect(_pick_dir)
     menu.addAction("Ouvrir les diapos").triggered.connect(_open_dir)
     menu.addSeparator()
@@ -156,4 +161,27 @@ def run(icon_path):
         win.hide()      # démarre dans le tray, sans fenêtre
     else:
         _show()
+
+    # crash au run précédent (sys.excepthook → data/crash.log, desktop
+    # .py) : on le signale une fois puis on purge pour ne pas re-notifier
+    from nextevents.settings import SETTINGS_FILE
+    crash_log = SETTINGS_FILE.parent / "crash.log"
+    if crash_log.exists():
+        try:
+            tail = crash_log.read_text(
+                encoding="utf-8", errors="replace")[-600:]
+        except OSError:
+            tail = ""
+        crash_log.unlink(missing_ok=True)
+
+        def _crash_notice():
+            QMessageBox.warning(
+                win, "Nextevents — arrêt inattendu",
+                "L'application s'est terminée de manière inattendue "
+                "au lancement précédent.\n\n"
+                "Détail technique :\n" + (tail or "(journal vide)")
+                + f"\n\nJournal complet : {SETTINGS_FILE.parent / 'app.log'}")
+
+        QTimer.singleShot(1500, _crash_notice)
+
     app.exec()
