@@ -433,14 +433,5 @@ class TodayTab(QWidget):
         if not p.exists():
             self.gen_lbl.setText("pas encore générée")
             return
-        from PySide6.QtWidgets import QDialog
-        d = QDialog(self)
-        d.setAttribute(Qt.WA_DeleteOnClose)
-        d.setWindowTitle("Diapo du jour — aperçu")
-        v = QVBoxLayout(d)
-        lbl = QLabel()
-        pix = QPixmap(str(p))
-        lbl.setPixmap(pix.scaled(1100, 620, Qt.KeepAspectRatio,
-                               Qt.SmoothTransformation))
-        v.addWidget(lbl)
-        d.exec()
+        from .preview import preview_image
+        preview_image(self, p, f"Diapo du jour — {name}")

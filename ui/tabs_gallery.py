@@ -208,39 +208,12 @@ class GalleryTabMixin:
     # ———————————————————— galerie ————————————————————
 
     def _preview_slide(self, it):
-        """Aperçu d'une diapo (double-clic) — F11 plein écran, Échap
-        fermer. Le widget _Slide re-met à l'échelle à chaque resize,
-        l'image est donc décodée à la résolution d'écran : nette en
-        plein écran comme en fenêtré."""
+        """Aperçu d'une diapo (double-clic) — F11 plein écran."""
         rel = it.data(Qt.UserRole)
         if not rel:
             return
-        p = resolve_out_dir() / rel
-        scr = self.screen().availableGeometry()
-        from PySide6.QtGui import QImageReader
-        r = QImageReader(str(p))
-        sz = r.size()
-        if sz.isValid():
-            sz.scale(scr.width(), scr.height(), Qt.KeepAspectRatio)
-            r.setScaledSize(sz)
-        img = r.read()
-        if img.isNull():
-            return
-        from .slideshow import _Slide
-        d = QDialog(self)
-        d.setAttribute(Qt.WA_DeleteOnClose)
-        d.setWindowTitle(it.text() + "  ·  F11 plein écran")
-        d.setStyleSheet("background:#000")
-        d.resize(scr.width() * 3 // 4, scr.height() * 3 // 4)
-        v = QVBoxLayout(d)
-        v.setContentsMargins(0, 0, 0, 0)
-        sl = _Slide(d)
-        sl.set_slide(None, img)
-        v.addWidget(sl)
-        QShortcut(QKeySequence("F11"), d, activated=lambda:
-                  d.showNormal() if d.isFullScreen()
-                  else d.showFullScreen())
-        d.show()
+        from .preview import preview_image
+        preview_image(self, resolve_out_dir() / rel, it.text())
 
     def _refresh_gallery(self):
         """Recharge la liste puis décode les vignettes dans un thread —
