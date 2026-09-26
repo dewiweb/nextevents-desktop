@@ -31,6 +31,13 @@ datas += tmp[0] + copy_metadata("keyring")
 binaries += tmp[1]
 hiddenimports += tmp[2]
 
+# Windows n'a pas de base tz système : zoneinfo a besoin du package
+# tzdata (données pures, rien d'importé en clair → hiddenimports)
+tmp = collect_all("tzdata")
+datas += tmp[0]
+binaries += tmp[1]
+hiddenimports += tmp[2]
+
 a = Analysis(
     ["desktop.py"],
     binaries=binaries,
