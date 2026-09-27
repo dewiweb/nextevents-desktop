@@ -92,25 +92,31 @@ class UiCollisionTest(unittest.TestCase):
     `self.<nom>` tombent sur la mauvaise — silencieusement, car
     PySide6 ignore les arguments excédentaires (bug constaté dans
     openagenda-slides : _preview_slide doublé, le double-clic
-    galerie rendait le mauvais aperçu)."""
+    galerie rendait le mauvais aperçu).
+
+    Analyse statique par AST : importer les modules tirerait PySide6,
+    indisponible sur un runner sans libs GL."""
 
     def test_no_shadowed_methods_between_mixins(self):
-        from ui import tabs_destinations, tabs_gallery, tabs_general
-        from ui import today
-        mixins = [tabs_general.GeneralTabMixin,
-                  tabs_destinations.DestinationsTabMixin,
-                  tabs_gallery.GalleryTabMixin,
-                  today.TodayTab]
+        import ast
+        ui = ROOT / "ui"
         seen, dup = {}, []
-        for cls in mixins:
-            for name, fn in vars(cls).items():
-                if name.startswith("__") or not callable(fn):
+        for fname in ("tabs_general.py", "tabs_destinations.py",
+                      "tabs_gallery.py", "today.py"):
+            tree = ast.parse((ui / fname).read_text("utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ClassDef):
                     continue
-                if name in seen:
-                    dup.append(f"{name} : {seen[name]} vs "
-                               f"{cls.__name__}")
-                else:
-                    seen[name] = cls.__name__
+                for item in node.body:
+                    if isinstance(item, (ast.FunctionDef,
+                                         ast.AsyncFunctionDef)) \
+                            and not item.name.startswith("__"):
+                        if item.name in seen:
+                            dup.append(f"{item.name} : "
+                                       f"{seen[item.name]} vs "
+                                       f"{fname}:{node.name}")
+                        else:
+                            seen[item.name] = f"{fname}:{node.name}"
         self.assertEqual(dup, [])
 
 
