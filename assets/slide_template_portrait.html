@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<!--
+  Variante portrait d'une diapo nextevents (1240×1754, ratio A4 1:√2) —
+  même charte que slide_template.html, composition verticale : visuel
+  en haut, pastille, titre, description, specs, pied de page. Pensée
+  pour l'impression A4 (2480×3508 = 300 dpi en UHD).
+  Rempli par nextevents/slide.py via string.Template — mêmes variables
+  que le gabarit paysage.
+-->
+<html lang="fr"><head><meta charset="utf-8">
+<style>
+@font-face{font-family:'Oldschool Grotesk';font-weight:400;
+ src:url(data:font/woff2;base64,$font_regular) format('woff2')}
+@font-face{font-family:'Oldschool Grotesk';font-weight:500;
+ src:url(data:font/woff2;base64,$font_medium) format('woff2')}
+*{margin:0;box-sizing:border-box}
+html,body{width:1240px;height:1754px;overflow:hidden}
+body{font-family:'Oldschool Grotesk',Arial,sans-serif;color:$ink;
+ background:#000;display:flex;flex-direction:column}
+.card{position:relative;flex:1;background:$bg;border-radius:64px;
+ overflow:hidden;display:flex;flex-direction:column;padding:46px 48px;
+ gap:38px}
+.watermark{position:absolute;z-index:0;color:rgba(255,255,255,.35)}
+.watermark svg{display:block;width:700px;height:700px}
+.watermark--tr{top:-220px;right:-220px}
+.watermark--bl{bottom:-220px;left:-220px}
+.photo-block{position:relative;flex:0 0 780px}
+.photo{position:absolute;inset:0;width:100%;height:100%;
+ object-fit:cover;object-position:center 28%;border-radius:44px;
+ display:block;background:$dark}
+.photo--empty{display:block}
+.photo--empty>svg{position:absolute;inset:0;width:100%;height:100%}
+.ph-logo{position:absolute;inset:0;display:flex;align-items:center;
+ justify-content:center;color:rgba(20,20,20,.75)}
+.ph-logo svg{width:52%}
+.tag{position:absolute;left:24px;bottom:24px;z-index:2;background:#fff;
+ border-radius:2em;padding:12px 34px;font-size:30px;font-weight:500;
+ box-shadow:0 10px 34px rgba(20,20,20,.14)}
+.credit{position:absolute;right:20px;bottom:20px;z-index:2;font-size:16px;
+ line-height:1.3;max-width:340px;text-align:right;color:#fff;
+ background:rgba(20,20,20,.45);border-radius:1.2em;padding:5px 14px}
+.content{position:relative;flex:1;display:flex;flex-direction:column;
+ padding:0 14px;min-height:0}
+h1{font-size:76px;font-weight:500;line-height:1.06;letter-spacing:-.01em;
+ display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;
+ overflow:hidden}
+.desc{font-size:32px;line-height:1.4;color:rgba(20,20,20,.78);
+ margin-top:28px;display:-webkit-box;-webkit-line-clamp:7;
+ -webkit-box-orient:vertical;overflow:hidden}
+.specs{margin-top:auto;display:flex;flex-direction:column;gap:20px;
+ padding-bottom:64px}
+.specs--tight{gap:15px}
+.specs--tight .spec{font-size:31px}
+.spec{display:flex;align-items:center;gap:16px;font-size:36px;
+ font-weight:500}
+.spec svg{flex:0 0 auto;width:40px;height:40px}
+.attrib{position:absolute;right:38px;bottom:26px;font-size:21px;
+ color:rgba(20,20,20,.45);display:flex;align-items:center;gap:12px}
+.attrib b{font-size:28px;font-weight:500;color:#efeae6;
+ background:#555555;border-radius:2em;padding:10px 26px}
+</style></head><body>
+<div class="card">
+<div class="watermark watermark--tr">$logo_mark</div>
+<div class="watermark watermark--bl">$logo_mark</div>
+<div class="photo-block">
+  $media
+  <span class="tag">$tag</span>
+</div>
+<div class="content">
+  <h1 style="font-size:${h1_size}px">$title</h1>
+  <p class="desc">$desc</p>
+  <div class="$specs_cls">$specs_html</div>
+</div>
+<div class="attrib">Tout le programme sur <b>lcl.bzh/prog</b></div>
+</div>
+</body></html>
