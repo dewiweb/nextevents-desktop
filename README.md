@@ -236,6 +236,26 @@ L'infobulle de l'icône affiche le nombre de diapos et l'état. Journal
 applicatif : `data/app.log`. Diagnostic du rendu : `--diag` →
 `data/diag.log`.
 
+## Maquette graphique (ajuster la charte)
+
+Les gabarits des diapos sont éditables **sans environnement de dev** —
+un éditeur de texte suffit. La charte commune (pastille, crédit photo,
+specs, pied de page, fontes) vit dans `assets/slide_base.css` ; les
+métriques de chaque format (marges, tailles, cadrage) sont des
+variables nommées et commentées dans le bloc `:root` en tête de chaque
+`slide_template*.html`.
+
+- **Windows** : les fichiers sont en clair dans
+  `nextevents/_internal/assets/` — éditer, relancer `nextevents.exe`,
+  régénérer une diapo depuis la galerie.
+- **Linux / AppImage** : `./maquette.sh` extrait les gabarits dans
+  `maquette-assets/` et lance l'app dessus — même boucle d'édition.
+
+Le HTML généré (`data/diaporama/html/*.html`) est autonome : il
+s'ouvre tel quel dans un navigateur pour un contrôle plein écran.
+Une fois la retouche validée, reporter la valeur dans les sources —
+les assets du bundle sont en lecture seule.
+
 ## Build Windows (Python ≥ 3.11)
 
 ```bat
