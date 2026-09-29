@@ -352,7 +352,11 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
         self.interval.setValue(_interval_min(s))
         self.sched_times.setText(s.get("sched_times") or "")
         # specs : specs_show vide = toutes ; overrides « Clé = v »/ligne
-        shown = set((s.get("specs_show") or "").split(","))
+        # specs_show vide = toutes — "".split(",") donne [""] : il
+        # faut filtrer les chaînes vides sinon toutes les coches
+        # apparaissent décochées et le prochain save n'écrirait
+        # que "Date"
+        shown = set(filter(None, (s.get("specs_show") or "").split(",")))
         over = parse_kv(s.get("spec_overrides") or "")
         for k, (cb, ov) in self._spec_rows.items():
             cb.setChecked(not shown or k in shown)

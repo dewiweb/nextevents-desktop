@@ -195,6 +195,27 @@ class ParseTest(unittest.TestCase):
         self.assertIsNone(series_logo(text, "Autre série"))
 
 
+class SpecsCheckboxesTest(unittest.TestCase):
+
+    def test_empty_specs_show_checks_all(self):
+        """Régression : specs_show="" (= toutes) doit cocher toutes les
+        specs au chargement. "".split(",") renvoie [""] — sans filtrage
+        des chaînes vides, `not shown` était faux et tout apparaissait
+        décoché ; le save suivant n'écrivait que "Date"."""
+        try:
+            os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+            from PySide6.QtWidgets import QApplication
+        except ImportError:
+            self.skipTest("PySide6 indisponible")
+        st.save_settings(dict(st.DEFAULTS))   # specs_show = ""
+        QApplication.instance() or QApplication([])
+        from ui.window import MainWindow
+        w = MainWindow(tray_ok=False, icon_path="nextevents.ico")
+        self.assertTrue(
+            all(cb.isChecked() for cb, _o in w._spec_rows.values()))
+        w.deleteLater()
+
+
 class SlideTemplateTest(unittest.TestCase):
 
     def test_base_css_injection(self):
