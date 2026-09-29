@@ -99,6 +99,32 @@ class VersionTest(unittest.TestCase):
         self.assertFalse(version.newer_than_current("v0.5.0"))
         self.assertFalse(version.newer_than_current("v0.4.9"))
 
+    def test_pick_newer(self):
+        """La liste /releases n'est pas triée par version — la
+        sélection doit comparer. Une beta voit les prereleases (flag
+        ou tiret dans le tag) ; une stable n'en voit aucune."""
+        releases = [
+            {"tag_name": "v0.5.0-beta.28", "prerelease": False,
+             "html_url": "u28"},            # en tête mais plus vieille
+            {"tag_name": "v0.5.0-beta.30", "prerelease": True,
+             "html_url": "u30"},
+            {"tag_name": "v0.5.0-beta.29", "prerelease": True,
+             "html_url": "u29", "draft": True},   # draft : ignorée
+        ]
+        # beta → le max parmi toutes les releases, beta.30 en 2e position
+        self.assertEqual(version.pick_newer(releases, beta=True),
+                         ("v0.5.0-beta.30", "u30"))
+        # stable → rien d'admissible : le tiret du tag classe beta.28
+        # comme préversion même sans le flag prerelease
+        self.assertEqual(version.pick_newer(releases, beta=False),
+                         ("", ""))
+        # avec une stable dans la liste, c'est elle qui sort
+        releases.append({"tag_name": "v0.4.0", "prerelease": False,
+                         "html_url": "u04"})
+        self.assertEqual(version.pick_newer(releases, beta=False),
+                         ("v0.4.0", "u04"))
+        self.assertEqual(version.pick_newer("pas une liste"), ("", ""))
+
 
 class UiCollisionTest(unittest.TestCase):
     """Deux mixins ne doivent pas définir le même nom de méthode :
