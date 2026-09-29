@@ -230,6 +230,7 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
                 f"{k} = {ov.text().strip()}"
                 for k, (cb, ov) in self._spec_rows.items()
                 if ov.text().strip()),
+            spec_drops=self.spec_drops.text().strip(),
             next_label=self.next_label.text(),
             ftp_host=self.ftp_host.text().strip(),
             ftp_port=self.ftp_port.value(),
@@ -359,6 +360,7 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
         self.next_label.setText(
             s.get("next_label", DEFAULT_NEXT_LABEL))
         self.next_label.setPlaceholderText(DEFAULT_NEXT_LABEL)
+        self.spec_drops.setText(s.get("spec_drops") or "")
         self.maxev.setValue(s["max_events"])
         i = self.limit_mode.findData(s.get("limit_mode") or "count")
         self.limit_mode.setCurrentIndex(max(i, 0))

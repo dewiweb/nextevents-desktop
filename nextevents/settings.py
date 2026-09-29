@@ -24,6 +24,7 @@ DEFAULTS = {
     # prefs d'affichage des specs (backport openagenda-slides)
     "specs_show": "",        # clés affichées à virgules — vide = toutes
     "spec_overrides": "",    # « Clé = valeur forcée »/ligne
+    "spec_drops": "",        # valeurs à retirer des specs, à virgules
     "next_label": "Prochaine séance : ",  # préfixe récurrent (vide = off)
     # séries éditoriales : « identifiant = Libellé » par ligne —
     # slug de page série du site ou keyword OpenAgenda

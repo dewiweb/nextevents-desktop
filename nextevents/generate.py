@@ -118,6 +118,10 @@ def _apply_spec_prefs(events, cfg):
     - spec_overrides : « Clé = valeur »/ligne — remplace ou ajoute
       la spec (le Lieu OA peut désigner le point de diffusion, pas
       la salle : on le corrige ou on le masque globalement)
+    - spec_drops : fragments à virgules retirés des valeurs — les
+      specs sont des listes jointes par « · » : on enlève un item
+      sans perdre les autres (ex. « Dispositifs d'écoute amplifiée »,
+      commodité du lieu plutôt qu'accessibilité de la séance)
     Une clé forcée masquée par specs_show n'est pas ajoutée."""
     if not cfg:
         return
@@ -125,14 +129,25 @@ def _apply_spec_prefs(events, cfg):
     shown = [t.strip() for t in
              (cfg.get("specs_show") or "").split(",") if t.strip()]
     show = set(shown) if shown else None
+    drops = {t.strip() for t in
+             (cfg.get("spec_drops") or "").split(",") if t.strip()}
     over = parse_kv(cfg.get("spec_overrides") or "")
-    if show is None and not over:
+    if show is None and not over and not drops:
         return
     for ev in events:
         specs = dict(ev.get("specs") or {})
         if show is not None:
             specs = {k: v for k, v in specs.items()
                      if k == "Date" or k in show}
+        for k, v in list(specs.items()):
+            if k == "Date" or not drops:
+                continue
+            kept = [p.strip() for p in v.split(" · ")
+                    if p.strip() and p.strip() not in drops]
+            if kept:
+                specs[k] = " · ".join(kept)
+            else:
+                del specs[k]  # tous les items masqués → spec omise
         for k, v in over.items():
             if v and (show is None or k in show or k == "Date"):
                 specs[k] = v

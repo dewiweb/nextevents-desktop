@@ -122,6 +122,15 @@ class GeneralTabMixin:
             row.addWidget(ov, 1)
             f.addRow(row)
             self._spec_rows[key] = (cb, ov)
+        self.spec_drops = QLineEdit()
+        self.spec_drops.setPlaceholderText(
+            "Dispositifs d'écoute amplifiée, …")
+        self.spec_drops.setToolTip(
+            "Valeurs à retirer des specs, séparées par des virgules — "
+            "un item est enlevé d'une liste « a · b · c » sans perdre "
+            "le reste ; si tous les items d'une spec sont masqués, "
+            "la spec est omise")
+        f.addRow("Valeurs masquées", self.spec_drops)
         self.next_label = QLineEdit()
         self.next_label.setToolTip(
             "Préfixe de la spec Date pour les événements à plusieurs "
