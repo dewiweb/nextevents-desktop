@@ -110,6 +110,35 @@ def _limit_events(events, cfg, max_events):
     return out
 
 
+def _apply_spec_prefs(events, cfg):
+    """Préférences d'affichage des specs — appliquées après collecte,
+    donc identiques quelle que soit la source (site, OA legacy, v2) :
+    - specs_show : clés autorisées à virgules (vide = toutes ; Date
+      est toujours conservée — requise pour le nommage)
+    - spec_overrides : « Clé = valeur »/ligne — remplace ou ajoute
+      la spec (le Lieu OA peut désigner le point de diffusion, pas
+      la salle : on le corrige ou on le masque globalement)
+    Une clé forcée masquée par specs_show n'est pas ajoutée."""
+    if not cfg:
+        return
+    from .settings import parse_kv
+    shown = [t.strip() for t in
+             (cfg.get("specs_show") or "").split(",") if t.strip()]
+    show = set(shown) if shown else None
+    over = parse_kv(cfg.get("spec_overrides") or "")
+    if show is None and not over:
+        return
+    for ev in events:
+        specs = dict(ev.get("specs") or {})
+        if show is not None:
+            specs = {k: v for k, v in specs.items()
+                     if k == "Date" or k in show}
+        for k, v in over.items():
+            if v and (show is None or k in show or k == "Date"):
+                specs[k] = v
+        ev["specs"] = specs
+
+
 def generate(out_dir=None, max_events=0, pages=99, cfg=None, size=DEFAULT_SIZE):
     """Génère le diaporama complet. Retourne la liste des PNG produits.
     cfg peut contenir les réglages ftp_* et smb_* pour pousser le
@@ -135,8 +164,10 @@ def generate(out_dir=None, max_events=0, pages=99, cfg=None, size=DEFAULT_SIZE):
     if not use_oa:
         events = list_events(max_pages=pages, categories=cats)
         # une carte par séance sur le site → une diapo par événement
-        events = group_sessions(events)
+        events = group_sessions(
+            events, (cfg or {}).get("next_label"))
     events = _limit_events(events, cfg, max_events)
+    _apply_spec_prefs(events, cfg)
     print(f"  {len(events)} événements trouvés")
     if not events:
         raise RuntimeError(

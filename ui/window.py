@@ -28,7 +28,8 @@ from PySide6.QtWidgets import (
 
 from nextevents.runner import run_generation, slides
 from nextevents.settings import (
-    load_settings, save_settings, state,
+    load_settings, save_settings, state, parse_kv,
+    DEFAULT_NEXT_LABEL,
 )
 from .style import STYLE, WheelGuard  # noqa: F401 — ré-export pour ui.app
 from .tabs_general import GeneralTabMixin
@@ -204,6 +205,12 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
         """Lit les widgets → dict de réglages (mêmes clés que la webui)."""
         s = load_settings()
         s.pop("interval_hours", None)  # remplacé par interval_min
+        # specs_show : toutes cochées = "" (toutes) ; aucune = "Date"
+        # seule — la Date reste requise pour le nommage des fichiers
+        shown = [k for k, (cb, _o) in self._spec_rows.items()
+                 if cb.isChecked()]
+        specs_show = ("" if len(shown) == len(self._spec_rows)
+                      else ",".join(shown) if shown else "Date")
         s.update(
             interval_min=self.interval.value(),
             sched_times=self.sched_times.text().strip(),
@@ -218,6 +225,12 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
             gen_categories=",".join(
                 slug for slug, cb in self._cat_boxes.items()
                 if cb.isChecked()),
+            specs_show=specs_show,
+            spec_overrides="\n".join(
+                f"{k} = {ov.text().strip()}"
+                for k, (cb, ov) in self._spec_rows.items()
+                if ov.text().strip()),
+            next_label=self.next_label.text(),
             ftp_host=self.ftp_host.text().strip(),
             ftp_port=self.ftp_port.value(),
             ftp_path=self.ftp_path.text().strip(),
@@ -337,6 +350,15 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
         from nextevents.runner import _interval_min
         self.interval.setValue(_interval_min(s))
         self.sched_times.setText(s.get("sched_times") or "")
+        # specs : specs_show vide = toutes ; overrides « Clé = v »/ligne
+        shown = set((s.get("specs_show") or "").split(","))
+        over = parse_kv(s.get("spec_overrides") or "")
+        for k, (cb, ov) in self._spec_rows.items():
+            cb.setChecked(not shown or k in shown)
+            ov.setText(over.get(k, ""))
+        self.next_label.setText(
+            s.get("next_label", DEFAULT_NEXT_LABEL))
+        self.next_label.setPlaceholderText(DEFAULT_NEXT_LABEL)
         self.maxev.setValue(s["max_events"])
         i = self.limit_mode.findData(s.get("limit_mode") or "count")
         self.limit_mode.setCurrentIndex(max(i, 0))

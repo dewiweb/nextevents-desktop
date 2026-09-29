@@ -36,6 +36,15 @@ class WheelGuard(QObject):
 INK, BG, CARD, SUB, ACCENT = "#efeae6", "#141414", "#1e1d1c", \
     "#8f8c8a", "#bf4c3c"
 
+import sys
+from pathlib import Path
+
+# url() d'une stylesheet Qt : chemin absolu, slashs POSIX (Windows
+# inclus) — en mode frozen les assets vivent dans _MEIPASS
+_base = Path(getattr(sys, "_MEIPASS",
+                     Path(__file__).resolve().parent.parent))
+CHECK_IMG = (_base / "assets" / "check.svg").as_posix()
+
 STYLE = f"""
 QMainWindow, QWidget {{ background:{BG}; color:{INK};
     font-family:'Oldschool Grotesk',system-ui,sans-serif }}
@@ -45,7 +54,18 @@ QGroupBox {{ background:{CARD}; border:1px solid #302f2e;
 QGroupBox::title {{ subcontrol-origin:margin; left:14px;
     padding:0 6px; color:{INK} }}
 QLabel {{ color:{SUB}; background:transparent }}
-QCheckBox, QRadioButton {{ background:transparent; spacing:8px }}
+QCheckBox, QRadioButton {{ background:transparent; spacing:8px;
+    color:{INK} }}
+QCheckBox::indicator, QRadioButton::indicator {{
+    width:15px; height:15px; background:{BG};
+    border:1px solid #565452; border-radius:4px }}
+QCheckBox::indicator:hover, QRadioButton::indicator:hover {{
+    border-color:{SUB} }}
+QCheckBox::indicator:checked {{ background:{ACCENT};
+    border-color:{ACCENT}; image:url({CHECK_IMG}) }}
+QRadioButton::indicator {{ border-radius:8px }}
+QRadioButton::indicator:checked {{ background:{ACCENT};
+    border-color:{ACCENT}; image:url({CHECK_IMG}) }}
 QLineEdit, QSpinBox, QComboBox, QPlainTextEdit {{ background:{BG};
     border:1px solid #302f2e; color:{INK}; border-radius:7px;
     padding:6px 10px }}

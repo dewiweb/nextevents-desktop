@@ -118,10 +118,14 @@ def _duration(begin, end):
     return f"{h}h{m:02d}" if m else (f"{h}h" if h else f"{mins} min")
 
 
-def _date_spec(timings):
+def _date_spec(timings, next_label=None):
     """Construit la spec Date + compteur de séances + durée + bornes.
     timings : liste de tuples locaux (begin, end) triés par début.
+    `next_label` préfixe les récurrents (vide = date seule).
     Retourne (date_spec, nb_séances, durée, _dt, _dt_end, pinned)."""
+    if next_label is None:
+        from .settings import DEFAULT_NEXT_LABEL
+        next_label = DEFAULT_NEXT_LABEL
     today = datetime.date.today()
     future = [t for t in timings if t[1][:3] >=
               (today.year, today.month, today.day)]
@@ -160,8 +164,8 @@ def _date_spec(timings):
     # « Prochaine séance : » quand l'événement est récurrent
     nx = next(iter(future))
     date_spec = f"{_fmt_day(nx[0])} à {_fmt_time(nx[0])}"
-    if len(future) > 1:
-        date_spec = f"Prochaine séance : {date_spec}"
+    if len(future) > 1 and next_label:
+        date_spec = f"{next_label}{date_spec}"
     return (date_spec, len(future),
             _duration(nx[0], nx[1]), nx[0], nx[0], False)
 
@@ -182,13 +186,13 @@ def _timings_pairs(raw):
 
 def _base_map(e, cat_value, cat_label, public_label, kws, cond, timings,
               title, url, desc, desc_long, html_txt, image, credit, lieu,
-              access_codes, age=None, series_map=None):
+              access_codes, age=None, series_map=None, next_label=None):
     """Construit le dict événement commun (v2 et legacy convergent ici).
     `e` ne sert que de référence pour l'uid/canonicalUrl éventuels."""
     pairs = _timings_pairs(timings)
     if pairs:
         date_spec, n_sessions, dur, dt, dt_end, pinned = (
-            _date_spec(pairs))
+            _date_spec(pairs, next_label))
     else:
         # aucun créneau : comme « Exposition permanente » du site
         date_spec, n_sessions, dur = "Exposition permanente", 0, ""
@@ -253,7 +257,8 @@ def _base_map(e, cat_value, cat_label, public_label, kws, cond, timings,
     }
 
 
-def _map_v2(e, cat_opts, pub_opts, agenda, series_map=None):
+def _map_v2(e, cat_opts, pub_opts, agenda, series_map=None,
+            next_label=None):
     cat_id = e.get("categorie")
     cat_value, cat_label = (cat_opts.get(cat_id) or (None, None))
     pub_ids = e.get("publics") or []
@@ -285,7 +290,7 @@ def _map_v2(e, cat_opts, pub_opts, agenda, series_map=None):
         (e.get("html") or {}).get("fr", ""),
         image, e.get("imageCredits") or "",
         (e.get("location") or {}).get("name", ""),
-        acc_codes, e.get("age"), series_map)
+        acc_codes, e.get("age"), series_map, next_label)
     if not e.get("timings"):
         # timings indisponibles même sur le détail : le texte
         # « dateRange » éditorial (« 4 septembre 2026 - 2 juillet
@@ -298,7 +303,7 @@ def _map_v2(e, cat_opts, pub_opts, agenda, series_map=None):
     return ev
 
 
-def _map_legacy(e, series_map=None):
+def _map_legacy(e, series_map=None, next_label=None):
     cat_value = cat_label = None
     pubs = []
     for g in e.get("tagGroups") or []:
@@ -320,7 +325,8 @@ def _map_legacy(e, series_map=None):
         (e.get("html") or {}).get("fr", ""),
         e.get("originalImage") or e.get("image"),
         e.get("imageCredits") or "", e.get("locationName", ""),
-        e.get("accessibility") or [], e.get("age"), series_map)
+        e.get("accessibility") or [], e.get("age"), series_map,
+        next_label)
 
 
 # ———————————————————— fetch ————————————————————
@@ -342,7 +348,7 @@ def _resolve_uid(agenda):
     return int(m.group(1))
 
 
-def _v2_events(agenda, key, series_map=None):
+def _v2_events(agenda, key, series_map=None, next_label=None):
     """API v2 officielle : schéma (libellés catégorie/public) puis
     événements à venir paginés."""
     a = _get(f"{API}/agendas/{agenda}",
@@ -386,11 +392,12 @@ def _v2_events(agenda, key, series_map=None):
                     e["timings"] = full["timings"]
             except Exception:
                 pass  # le texte dateRange servira de spécification
-    return [_map_v2(e, cat_opts, pub_opts, agenda, series_map)
+    return [_map_v2(e, cat_opts, pub_opts, agenda, series_map,
+                    next_label)
             for e in events]
 
 
-def _legacy_events(agenda, series_map=None):
+def _legacy_events(agenda, series_map=None, next_label=None):
     """Export public legacy (sans clé, déprécié) : tout l'historique,
     filtré côté client aux événements pas terminés."""
     uid = _resolve_uid(agenda)
@@ -414,7 +421,7 @@ def _legacy_events(agenda, series_map=None):
         last = datetime.date(*pairs[-1][1][:3])
         if last < today:
             continue  # terminé — l'export n'a pas de filtre serveur
-        out.append(_map_legacy(e, series_map))
+        out.append(_map_legacy(e, series_map, next_label))
     return out
 
 
@@ -426,11 +433,13 @@ def oa_list_events(cfg):
     key = (cfg.get("oa_api_key") or "").strip()
     from .scrape import parse_series_map
     series_map = parse_series_map(cfg.get("series_map", "")) or None
+    from .settings import DEFAULT_NEXT_LABEL
+    next_label = cfg.get("next_label", DEFAULT_NEXT_LABEL)
     if key:
         print("  source : OpenAgenda API v2")
-        return _v2_events(agenda, key, series_map)
+        return _v2_events(agenda, key, series_map, next_label)
     print("  source : export OpenAgenda (sans clé — endpoint déprécié)")
-    return _legacy_events(agenda, series_map)
+    return _legacy_events(agenda, series_map, next_label)
 
 
 def _norm(s):

@@ -93,6 +93,14 @@ Ordre fixe `SPEC_ORDER`, chaque ligne absente est omise :
 | **Public** | `Familles · dès 8 ans` (schéma OA `publics` + `age.min`) |
 | **Accessibilité** | keywords OA `def*` ∪ mentions dans le texte |
 
+Réglage « Informations affichées » (Général) — chaque spec peut être
+**masquée** (case décochée) ou **forcée** à une valeur constante
+(champ à droite : ex. `Lieu = Auditorium` si le champ lieu OA désigne
+autre chose). La Date reste toujours affichée — elle sert au nommage.
+Le préfixe des récurrents (« Prochaine séance : ») est éditable —
+vide = date seule. Appliqué après collecte : couvre indifféremment
+les trois sources (site, OA legacy, OA v2).
+
 ### D'où viennent les horaires
 
 L'horaire n'est jamais saisi : il est lu depuis la source, puis

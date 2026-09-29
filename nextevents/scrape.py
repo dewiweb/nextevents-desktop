@@ -175,12 +175,16 @@ def event_dates(ev):
     return None, None
 
 
-def group_sessions(events):
+def group_sessions(events, next_label=None):
     """Fusionne les séances multiples d'un même événement : le site
     éclate chaque date en carte séparée (animations, ateliers, visites
     et rdv4c récurrents → des dizaines de cartes par événement). Une
     diapo = un événement : on garde la prochaine séance (la spec
-    « Séances : N à venir » n'apportait rien — retirée)."""
+    « Séances : N à venir » n'apportait rien — retirée).
+    `next_label` préfixe la date des récurrents (vide = date seule)."""
+    if next_label is None:
+        from .settings import DEFAULT_NEXT_LABEL
+        next_label = DEFAULT_NEXT_LABEL
     groups = {}
     for ev in events:
         key = re.sub(r"[^a-z0-9à-ÿ]+", "", (ev.get("title") or "")
@@ -196,8 +200,9 @@ def group_sessions(events):
         if len(g) > 1:
             ev["n_sessions"] = len(g)
             d = ev["specs"].get("Date", "")
-            if d and not d.startswith("Prochaine séance"):
-                ev["specs"]["Date"] = f"Prochaine séance : {d}"
+            if d and next_label \
+                    and not d.startswith(next_label.strip()):
+                ev["specs"]["Date"] = f"{next_label}{d}"
         out.append(ev)
     out.sort(key=lambda e: (
         0 if e.get("pinned") else 1, e.get("_dt") or (9999, 12, 31, 23, 59)))

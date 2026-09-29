@@ -150,6 +150,10 @@ def run(icon_path):
     if mode in ("landscape", "portrait"):
         QTimer.singleShot(
             500, lambda: win._open_slideshow(mode == "portrait"))
+    # vérif de mise à jour silencieuse au démarrage : une nouvelle
+    # release remonte dans la barre de statut + onglet Général
+    QTimer.singleShot(
+        8000, lambda: win._check_update(quiet=True))
     if tray_ok and prefs.get("start_minimized", 0):
         win.hide()      # démarre dans le tray, sans fenêtre
     else:

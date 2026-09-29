@@ -104,6 +104,31 @@ class GeneralTabMixin:
         f.addRow(grid)
         lay.addWidget(catsbox)
 
+        sp = QGroupBox("Informations affichées (specs)")
+        f = QFormLayout(sp)
+        f.setLabelAlignment(Qt.AlignRight)
+        # une ligne par spec : case « afficher » + champ de valeur
+        # forcée (vide = valeur de la source). Date : toujours
+        # affichée, elle sert au nommage des fichiers.
+        self._spec_rows = {}
+        for key in ("Durée", "Lieu", "Tarif", "Public",
+                    "Accessibilité"):
+            cb = QCheckBox(key)
+            cb.setChecked(True)
+            ov = QLineEdit(placeholderText="valeur forcée (optionnel)")
+            ov.setMinimumWidth(220)
+            row = QHBoxLayout()
+            row.addWidget(cb)
+            row.addWidget(ov, 1)
+            f.addRow(row)
+            self._spec_rows[key] = (cb, ov)
+        self.next_label = QLineEdit()
+        self.next_label.setToolTip(
+            "Préfixe de la spec Date pour les événements à plusieurs "
+            "séances — vide = afficher la date seule")
+        f.addRow("Préfixe récurrent", self.next_label)
+        lay.addWidget(sp)
+
         sers = QGroupBox("Séries éditoriales — identifiant = Libellé "
                          "[| logo.png] par ligne (slug de page du site "
                          "ou mot-clé OpenAgenda)")
@@ -241,10 +266,14 @@ class GeneralTabMixin:
             f"{len(added)} série(s) ajoutée(s), "
             f"{len(found) - len(added)} déjà listée(s)")
 
-    def _check_update(self):
+    def _check_update(self, quiet=False):
         """Interroge l'API GitHub releases en worker — résultat livré
-        par le signal update_done dans le thread GUI."""
-        self.update_lbl.setText("recherche…")
+        par le signal update_done dans le thread GUI. `quiet` (check
+        automatique au démarrage) : « recherche… » et « à jour » ne
+        polluent pas le libellé — seule une nouveauté s'affiche."""
+        self._upd_quiet = quiet
+        if not quiet:
+            self.update_lbl.setText("recherche…")
 
         def work():
             try:
@@ -259,13 +288,19 @@ class GeneralTabMixin:
         threading.Thread(target=work, daemon=True).start()
 
     def _on_update_done(self, tag, url_or_err):
+        quiet = getattr(self, "_upd_quiet", False)
         if not tag:
-            self.update_lbl.setText(f"échec : {url_or_err}")
+            if not quiet:
+                self.update_lbl.setText(f"échec : {url_or_err}")
             return
         from nextevents.version import VERSION, newer_than_current
         if newer_than_current(tag):
             self.update_lbl.setText(
                 f'<a href="{url_or_err}" style="color:#c99483">'
                 f"{tag} disponible — télécharger</a>")
-        else:
+            if quiet:
+                self.statusBar().showMessage(
+                    f"Nouvelle version {tag} disponible — "
+                    "voir l'onglet Général", 8000)
+        elif not quiet:
             self.update_lbl.setText(f"à jour ({VERSION})")

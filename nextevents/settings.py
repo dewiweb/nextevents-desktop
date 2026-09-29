@@ -21,6 +21,10 @@ DEFAULTS = {
     "oa_api_key": "",
     "oa_agenda": "leschampslibres",
     "data_source": "site",   # site | openagenda
+    # prefs d'affichage des specs (backport openagenda-slides)
+    "specs_show": "",        # clés affichées à virgules — vide = toutes
+    "spec_overrides": "",    # « Clé = valeur forcée »/ligne
+    "next_label": "Prochaine séance : ",  # préfixe récurrent (vide = off)
     # séries éditoriales : « identifiant = Libellé » par ligne —
     # slug de page série du site ou keyword OpenAgenda
     "series_map":
@@ -67,6 +71,24 @@ DEFAULTS = {
     "ss_tdur_p": 1500,
     "ss_screen_p": -1,
 }
+
+DEFAULT_NEXT_LABEL = "Prochaine séance : "
+
+
+def parse_kv(text):
+    """« Clé = valeur » par ligne → dict (réglage spec_overrides).
+    Lignes vides/# ignorées."""
+    out = {}
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        k, v = k.strip(), v.strip()
+        if k:
+            out[k] = v
+    return out
+
 
 # état runtime du serveur (génération en cours, journal, dernier run)
 state = {"running": False, "last_run": None, "last_error": None, "log": []}
