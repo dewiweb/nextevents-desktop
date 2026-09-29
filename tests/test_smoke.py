@@ -58,6 +58,20 @@ class SettingsTest(unittest.TestCase):
         s["out_dir"] = str(_TMP / "custom")
         self.assertEqual(st.resolve_out_dir(s), _TMP / "custom")
 
+    def test_interval_min_survives_load(self):
+        """Régression beta.26 : interval_min absent de DEFAULTS était
+        jeté par load_settings → _interval_min retombait sur
+        interval_hours=0 → le scheduler ne relançait jamais. Le
+        réglage en minutes doit survivre au round-trip, et un
+        ancien fichier en heures doit être converti."""
+        from nextevents.runner import _interval_min
+        (_TMP / "settings.json").write_text(
+            json.dumps({"interval_min": 5}))
+        self.assertEqual(_interval_min(st.load_settings()), 5)
+        (_TMP / "settings.json").write_text(
+            json.dumps({"interval_hours": 2}))
+        self.assertEqual(_interval_min(st.load_settings()), 120)
+
 
 class SecretsTest(unittest.TestCase):
 

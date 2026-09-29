@@ -12,7 +12,8 @@ OUT_DIR = Path(os.environ.get("OUT_DIR", DEFAULT_OUT))
 SETTINGS_FILE = Path(os.environ.get("SETTINGS_FILE", OUT_DIR / "settings.json"))
 
 DEFAULTS = {
-    "interval_hours": 0,
+    "interval_hours": 0,    # legacy — converti en interval_min au chargement
+    "interval_min": 0,      # rafraîchissement auto en minutes (0 = off)
     "sched_times": "",
     "max_events": 0,
     "limit_mode": "count",   # count | days | date
@@ -120,6 +121,15 @@ def load_settings():
                 pass
         else:
             out[k] = str(v)
+    # migration : fichier d'avant interval_min avec interval_hours
+    # renseigné → conversion en minutes (sans elle, la boucle ci-dessus
+    # ignore interval_min s'il n'est pas dans DEFAULTS, et l'ancien
+    # réglage en heures serait perdu)
+    if "interval_min" not in s and s.get("interval_hours"):
+        try:
+            out["interval_min"] = int(s["interval_hours"]) * 60
+        except (TypeError, ValueError):
+            pass
     # secrets : env var puis trousseau OS priment sur le fichier ;
     # la valeur en clair du JSON reste le dernier repli
     for k in secrets.KEYS:
