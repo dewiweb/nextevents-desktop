@@ -15,18 +15,20 @@ from .settings import (
 
 class LogWriter(io.TextIOBase):
     """Capture les print() de la génération vers state["log"] tout en
-    les répercutant vers le vrai stdout (data/app.log en frozen)."""
+    les répercutant vers le vrai stdout (data/app.log en frozen).
+    Chaque ligne est préfixée [HH:MM:SS] — journal UI et fichier."""
 
     def __init__(self, orig):
         self._orig = orig
 
     def write(self, s):
+        stamp = time.strftime("[%H:%M:%S] ")
         for line in s.splitlines():
             if line.strip():
-                state["log"].append(line)
+                state["log"].append(stamp + line)
                 del state["log"][:-500]
         try:
-            self._orig.write(s)
+            self._orig.write(stamp + s if s.strip() else s)
         except Exception:
             pass
         return len(s)
