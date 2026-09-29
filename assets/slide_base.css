@@ -1,0 +1,236 @@
+/* ==========================================================================
+   slide_base.css — charte commune des diapos « événement » nextevents
+   ==========================================================================
+   Ce fichier n'est pas un gabarit autonome : slide.py injecte son contenu
+   dans chaque gabarit à la place de la ligne `@import "slide_base.css";`.
+
+   Chaque gabarit (slide_template*.html) définit ses métriques dans son
+   bloc `:root{ --… }` ; les règles ci-dessous consomment ces variables.
+   Adapter un format = éditer les valeurs du gabarit. Modifier la charte
+   commune (pastille, ombres, specs, pied de page…) = éditer ce fichier,
+   valable pour les trois orientations.
+
+   Placeholders string.Template remplis par slide.py au rendu :
+     $$font_regular / $$font_medium   fontes Oldschool Grotesk (woff2 b64)
+     $$ink                            couleur d'encre du texte courant
+     $$bg                             fond de la carte (pastel de catégorie)
+     $$dark                           variante foncée (fond du bloc visuel)
+   ========================================================================== */
+
+
+/* ---------- Fontes embarquées & reset ------------------------------------ */
+
+@font-face {
+    font-family: 'Oldschool Grotesk';
+    font-weight: 400;
+    src: url(data:font/woff2;base64,$font_regular) format('woff2');
+}
+
+@font-face {
+    font-family: 'Oldschool Grotesk';
+    font-weight: 500;
+    src: url(data:font/woff2;base64,$font_medium) format('woff2');
+}
+
+* {
+    margin: 0;
+    box-sizing: border-box;
+}
+
+/* Dimensions fixes du canvas de conception : chaque gabarit les donne
+   dans son :root (--w/--h) ; le PNG final est mis à l'échelle au rendu. */
+html, body {
+    width: var(--w);
+    height: var(--h);
+    overflow: hidden;
+}
+
+/* #000 : marge sombre autour de la carte arrondie. */
+body {
+    font-family: 'Oldschool Grotesk', Arial, sans-serif;
+    color: $ink;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+}
+
+/* La carte occupe tout le viewport ; les filigranes y sont clippés. */
+.card {
+    position: relative;
+    flex: 1;
+    background: $bg;
+    border-radius: var(--card-radius);
+    padding: var(--card-pad);
+    gap: var(--card-gap);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+
+/* ---------- Filigranes (sigle en grand, deux coins opposés) --------------- */
+
+.watermark {
+    position: absolute;
+    z-index: 0;
+    color: rgba(255, 255, 255, .35);   /* les SVG héritent via currentColor */
+}
+
+.watermark svg {
+    display: block;
+    width: var(--wm-size);
+    height: var(--wm-size);
+}
+
+.watermark--tr { top: var(--wm-offset);    right: var(--wm-offset); }
+.watermark--bl { bottom: var(--wm-offset); left: var(--wm-offset); }
+
+
+/* ---------- Visuel (photo ou placeholder décoratif) ---------------------- */
+
+/* Le conteneur (.left / .photo-block) est défini par chaque gabarit ;
+   la photo le remplit entièrement. */
+.photo {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: var(--photo-pos);
+    border-radius: var(--photo-radius);
+    display: block;
+    background: $dark;
+}
+
+/* Sans image : le SVG décoratif injecté par slide.py remplit le bloc,
+   le logo est centré par-dessus. */
+.photo--empty { display: block; }
+
+.photo--empty > svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.ph-logo {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(20, 20, 20, .75);
+}
+
+.ph-logo svg { width: 52%; }
+
+
+/* ---------- Pastille catégorie & crédit photo (sur le visuel) ------------ */
+
+.tag {
+    position: absolute;
+    left: var(--tag-inset);
+    bottom: var(--tag-inset);
+    z-index: 2;
+    background: #fff;
+    border-radius: 2em;
+    padding: var(--tag-pad);
+    font-size: var(--tag-size);
+    font-weight: 500;
+    box-shadow: 0 10px 34px rgba(20, 20, 20, .14);
+}
+
+.credit {
+    position: absolute;
+    right: var(--credit-inset);
+    bottom: var(--credit-inset);
+    z-index: 2;
+    font-size: var(--credit-size);
+    line-height: 1.3;
+    max-width: var(--credit-maxw);
+    text-align: right;
+    color: #fff;
+    background: rgba(20, 20, 20, .45);
+    border-radius: 1.2em;
+    padding: var(--credit-pad);
+}
+
+
+/* ---------- Titre & description ------------------------------------------ */
+
+/* La taille du titre est fixée inline par slide.py ($$h1_size) selon la
+   longueur du titre ; ici seulement le nombre de lignes max. */
+h1 {
+    font-weight: 500;
+    line-height: 1.06;
+    letter-spacing: -.01em;
+    display: -webkit-box;
+    -webkit-line-clamp: var(--h1-lines);
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.desc {
+    font-size: var(--desc-size);
+    line-height: var(--desc-lh);
+    color: rgba(20, 20, 20, .78);
+    margin-top: var(--desc-mt);
+    max-width: var(--desc-maxw);
+    display: -webkit-box;
+    -webkit-line-clamp: var(--desc-lines);
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+
+/* ---------- Specs (date, durée, lieu, tarifs…) --------------------------- */
+
+/* Poussées en bas de la zone texte ; variante --tight quand il y a ≥4
+   lignes (classe choisie par slide.py). */
+.specs {
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--specs-gap);
+    padding-bottom: var(--specs-pad-bottom);
+}
+
+.specs--tight { gap: var(--specs-gap-tight); }
+.specs--tight .spec { font-size: var(--spec-size-tight); }
+
+.spec {
+    display: flex;
+    align-items: center;
+    gap: var(--spec-gap);
+    font-size: var(--spec-size);
+    font-weight: 500;
+}
+
+.spec svg {
+    flex: 0 0 auto;
+    width: var(--spec-icon);    /* « auto » : taille native de l'icône */
+    height: var(--spec-icon);
+}
+
+
+/* ---------- Pied de page (accroche + pastille URL) ----------------------- */
+
+.attrib {
+    position: absolute;
+    right: var(--attrib-right);
+    bottom: var(--attrib-bottom);
+    font-size: var(--attrib-size);
+    color: rgba(20, 20, 20, .45);
+    display: flex;
+    align-items: center;
+    gap: var(--attrib-gap);
+}
+
+.attrib b {
+    font-size: var(--attrib-b-size);
+    font-weight: 500;
+    color: #efeae6;
+    background: #555555;
+    border-radius: 2em;
+    padding: var(--attrib-b-pad);
+}

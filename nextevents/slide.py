@@ -49,6 +49,21 @@ TEMPLATES = {
     "portrait-screen": "slide_template_portrait_screen.html",
 }
 _TEMPLATES = {}
+_BASE_CSS = None
+
+
+# Les gabarits assets/slide_template*.html partagent leur charte via
+# assets/slide_base.css : la ligne `@import "slide_base.css";` du gabarit
+# est remplacée par le contenu du fichier au chargement (le HTML produit
+# reste autonome — tout est en ligne pour le navigateur de rendu).
+BASE_CSS_IMPORT = '@import "slide_base.css";'
+
+
+def _base_css():
+    global _BASE_CSS
+    if _BASE_CSS is None:
+        _BASE_CSS = (ASSET_DIR / "slide_base.css").read_text("utf-8")
+    return _BASE_CSS
 
 
 def portrait_size(size, fmt="a4"):
@@ -69,9 +84,13 @@ def portrait_key(fmt="a4"):
 
 def _template(orientation="landscape"):
     if orientation not in _TEMPLATES:
+        src = (ASSET_DIR / TEMPLATES[orientation]).read_text(encoding="utf-8")
+        if BASE_CSS_IMPORT not in src:
+            raise RuntimeError(
+                f"{TEMPLATES[orientation]} : ligne {BASE_CSS_IMPORT!r} "
+                "introuvable — la charte commune n'est pas injectée")
         _TEMPLATES[orientation] = Template(
-            (ASSET_DIR / TEMPLATES[orientation]).read_text(encoding="utf-8")
-        )
+            src.replace(BASE_CSS_IMPORT, _base_css()))
     return _TEMPLATES[orientation]
 
 
@@ -196,12 +215,13 @@ def slide_name(ev, idx):
     return f"slide-{prefix}-{slugify(ev['title'])}"
 
 
-def render_png_firefox(html_path, png_path, size=DEFAULT_SIZE):
+def render_png_firefox(html_path, png_path, size=DEFAULT_SIZE,
+                       orientation="landscape"):
     """Repli : firefox --screenshot avec zoom + fenêtre aux dimensions
-    voulues (le HTML est dessiné pour 1920x1080 paysage ou
-    1240x1754 — ratio A4 — portrait selon le format)."""
+    voulues (le HTML est dessiné pour les dimensions DESIGNS du
+    gabarit — zoom adapté au ratio réel)."""
     w, h = size
-    dw, _ = DESIGNS["portrait" if h > w else "landscape"]
+    dw, _ = DESIGNS[orientation]
     html_path = Path(html_path).resolve()
     png_path = Path(png_path)
     zoomed = html_path.with_suffix(".zoom.html")
@@ -250,7 +270,7 @@ def render_all(slides, size=DEFAULT_SIZE, orientation="landscape"):
     except ImportError:
         for hp, pp in slides:
             try:
-                render_png_firefox(hp, pp, size)
+                render_png_firefox(hp, pp, size, orientation)
                 yield pp
             except Exception as e:
                 print(f"  ✗ {pp.name} : {e}")

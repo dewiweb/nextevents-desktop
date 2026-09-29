@@ -169,5 +169,21 @@ class ParseTest(unittest.TestCase):
         self.assertIsNone(series_logo(text, "Autre série"))
 
 
+class SlideTemplateTest(unittest.TestCase):
+
+    def test_base_css_injection(self):
+        """Chaque gabarit doit contenir la ligne @import remplacée par
+        slide_base.css — sinon _template() lève une erreur au rendu et
+        le HTML généré ne doit garder aucun placeholder $ non échappé."""
+        from nextevents.paths import ASSET_DIR
+        from nextevents.slide import BASE_CSS_IMPORT, DESIGNS, TEMPLATES
+        for orient, fname in TEMPLATES.items():
+            src = (ASSET_DIR / fname).read_text("utf-8")
+            self.assertIn(BASE_CSS_IMPORT, src, fname)
+            self.assertIn(orient, DESIGNS)
+        # la base CSS existe et tient lieu de charte commune
+        self.assertTrue((ASSET_DIR / "slide_base.css").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

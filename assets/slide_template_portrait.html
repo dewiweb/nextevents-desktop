@@ -1,63 +1,81 @@
 <!DOCTYPE html>
 <!--
-  Variante portrait d'une diapo nextevents (1240×1754, ratio A4 1:√2) —
-  même charte que slide_template.html, composition verticale : visuel
-  en haut, pastille, titre, description, specs, pied de page. Pensée
-  pour l'impression A4 (2480×3508 = 300 dpi en UHD).
+  ==========================================================================
+  Gabarit de diapo « événement » — PORTRAIT A4 (conçu 1240×1754, 1:√2)
+  ==========================================================================
+  Même charte que slide_template.html, composition verticale : visuel en
+  haut (pastille + crédit incrustés), puis titre, description, specs,
+  pied de page. Pensée pour l'impression A4 (2480×3508 ≈ 300 dpi en UHD).
+
   Rempli par nextevents/slide.py via string.Template — mêmes variables
-  que le gabarit paysage.
+  que le gabarit paysage (voir son commentaire d'en-tête).
+
+  Charte commune : slide_base.css (injecté à la ligne @import
+  ci-dessous). Ce gabarit ne contient que ses métriques (:root) et sa
+  composition propre (photo-block/content).
 -->
 <html lang="fr"><head><meta charset="utf-8">
 <style>
-@font-face{font-family:'Oldschool Grotesk';font-weight:400;
- src:url(data:font/woff2;base64,$font_regular) format('woff2')}
-@font-face{font-family:'Oldschool Grotesk';font-weight:500;
- src:url(data:font/woff2;base64,$font_medium) format('woff2')}
-*{margin:0;box-sizing:border-box}
-html,body{width:1240px;height:1754px;overflow:hidden}
-body{font-family:'Oldschool Grotesk',Arial,sans-serif;color:$ink;
- background:#000;display:flex;flex-direction:column}
-.card{position:relative;flex:1;background:$bg;border-radius:64px;
- overflow:hidden;display:flex;flex-direction:column;padding:46px 48px;
- gap:38px}
-.watermark{position:absolute;z-index:0;color:rgba(255,255,255,.35)}
-.watermark svg{display:block;width:700px;height:700px}
-.watermark--tr{top:-220px;right:-220px}
-.watermark--bl{bottom:-220px;left:-220px}
-.photo-block{position:relative;flex:0 0 780px}
-.photo{position:absolute;inset:0;width:100%;height:100%;
- object-fit:cover;object-position:center 28%;border-radius:44px;
- display:block;background:$dark}
-.photo--empty{display:block}
-.photo--empty>svg{position:absolute;inset:0;width:100%;height:100%}
-.ph-logo{position:absolute;inset:0;display:flex;align-items:center;
- justify-content:center;color:rgba(20,20,20,.75)}
-.ph-logo svg{width:52%}
-.tag{position:absolute;left:24px;bottom:24px;z-index:2;background:#fff;
- border-radius:2em;padding:12px 34px;font-size:30px;font-weight:500;
- box-shadow:0 10px 34px rgba(20,20,20,.14)}
-.credit{position:absolute;right:20px;bottom:20px;z-index:2;font-size:16px;
- line-height:1.3;max-width:340px;text-align:right;color:#fff;
- background:rgba(20,20,20,.45);border-radius:1.2em;padding:5px 14px}
-.content{position:relative;flex:1;display:flex;flex-direction:column;
- padding:0 14px;min-height:0}
-h1{font-size:76px;font-weight:500;line-height:1.06;letter-spacing:-.01em;
- display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;
- overflow:hidden}
-.desc{font-size:32px;line-height:1.4;color:rgba(20,20,20,.78);
- margin-top:28px;display:-webkit-box;-webkit-line-clamp:7;
- -webkit-box-orient:vertical;overflow:hidden}
-.specs{margin-top:auto;display:flex;flex-direction:column;gap:20px;
- padding-bottom:64px}
-.specs--tight{gap:15px}
-.specs--tight .spec{font-size:31px}
-.spec{display:flex;align-items:center;gap:16px;font-size:36px;
- font-weight:500}
-.spec svg{flex:0 0 auto;width:40px;height:40px}
-.attrib{position:absolute;right:38px;bottom:26px;font-size:21px;
- color:rgba(20,20,20,.45);display:flex;align-items:center;gap:12px}
-.attrib b{font-size:28px;font-weight:500;color:#efeae6;
- background:#555555;border-radius:2em;padding:10px 26px}
+/* ---------- Métriques portrait A4 1240×1754 ------------------------------ */
+:root {
+    --w: 1240px;  --h: 1754px;          /* canvas de conception */
+
+    --card-radius: 64px;
+    --card-pad: 46px 48px;              /* marges internes de la carte */
+    --card-gap: 38px;                   /* visuel ↔ textes */
+
+    --wm-size: 700px;
+    --wm-offset: -220px;
+
+    --photo-radius: 44px;
+    --photo-pos: center 28%;            /* cadrage légèrement haut */
+
+    --tag-inset: 24px;
+    --tag-pad: 12px 34px;
+    --tag-size: 30px;
+
+    --credit-inset: 20px;
+    --credit-size: 16px;
+    --credit-maxw: 340px;
+    --credit-pad: 5px 14px;
+
+    --h1-lines: 5;
+    --desc-size: 32px;
+    --desc-lh: 1.4;
+    --desc-mt: 28px;
+    --desc-maxw: none;                  /* pleine largeur en portrait */
+    --desc-lines: 7;
+
+    --specs-gap: 20px;
+    --specs-pad-bottom: 64px;           /* dégage le pied de page absolu */
+    --specs-gap-tight: 15px;
+    --spec-gap: 16px;
+    --spec-size: 36px;
+    --spec-size-tight: 31px;
+    --spec-icon: 40px;
+
+    --attrib-right: 38px;
+    --attrib-bottom: 26px;
+    --attrib-size: 21px;
+    --attrib-gap: 12px;
+    --attrib-b-size: 28px;
+    --attrib-b-pad: 10px 26px;
+}
+
+@import "slide_base.css";
+
+/* ---------- Composition portrait : visuel au-dessus ----------------------- */
+
+.photo-block { position: relative; flex: 0 0 780px; }
+
+.content {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 0 14px;
+    min-height: 0;
+}
 </style></head><body>
 <div class="card">
 <div class="watermark watermark--tr">$logo_mark</div>
