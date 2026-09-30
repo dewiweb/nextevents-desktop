@@ -10,6 +10,8 @@ dépendance à un dépôt externe.
 
 Données dans ./data à côté de l'exe/AppImage ; journal dans
 ./data/app.log. --diag : diagnostique le rendu (data/diag.log).
+--serve[=PORT] : force la diffusion HTTP des diapos pour ce run
+(écrans distants : Android, kiosk, Pi — voir nextevents/serve.py).
 """
 
 import os
@@ -177,6 +179,13 @@ def main():
 
 
 if __name__ == "__main__":
+    # --serve[=PORT] : diffusion HTTP forcée pour ce run — prioritaire
+    # sur le réglage persisté (poste d'affichage sans UI)
+    for arg in sys.argv[1:]:
+        if arg == "--serve" or arg.startswith("--serve="):
+            os.environ["NEXTEVENTS_SERVE"] = "1"
+            if "=" in arg:
+                os.environ["NEXTEVENTS_SERVE_PORT"] = arg.split("=", 1)[1]
     if "--diag" in sys.argv:
         _diag()
     else:

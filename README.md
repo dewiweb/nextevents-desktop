@@ -256,6 +256,24 @@ s'ouvre tel quel dans un navigateur pour un contrôle plein écran.
 Une fois la retouche validée, reporter la valeur dans les sources —
 les assets du bundle sont en lecture seule.
 
+## Diffusion HTTP (écrans distants : Android, kiosk, Pi)
+
+L'app peut servir le diaporama en HTTP — tout navigateur pointé sur
+l'URL affiche les diapos en plein écran avec fondu, liste et images
+rafraîchies automatiquement (poll 15 s) :
+
+- **Réglage** : onglet Destinations → « Écrans distants » → cocher
+  *Servir les diapos en HTTP* + port — l'URL à ouvrir s'affiche
+  (`http://<ip>:<port>/`). Appliqué à chaud à l'enregistrement.
+- **Ligne de commande** : `--serve` ou `--serve=PORT` force la
+  diffusion pour ce run (poste d'affichage sans UI).
+- **La page choisit le format seule** : un écran en portrait reçoit les
+  diapos 9:16, sinon 16:9 (`?fmt=portrait` force).
+- **Diapo du jour** : servie seule sur `http://<ip>:<port>/today/`.
+
+Lecture seule, GET uniquement, uniquement le dossier de sortie —
+prévu pour un réseau interne (pas d'authentification).
+
 ## Build Windows (Python ≥ 3.11)
 
 ```bat

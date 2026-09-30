@@ -72,6 +72,8 @@ DEFAULTS = {
     "ss_transition_p": "fade",
     "ss_tdur_p": 1500,
     "ss_screen_p": -1,
+    "serve_enabled": 0,    # diaporama HTTP pour écrans distants
+    "serve_port": 8090,
 }
 
 DEFAULT_NEXT_LABEL = "Prochaine séance : "

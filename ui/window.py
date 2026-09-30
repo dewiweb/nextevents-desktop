@@ -264,6 +264,8 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
             ss_transition_p=self.ss_transition_p.currentData(),
             ss_tdur_p=self.ss_tdur_p.value(),
             ss_screen_p=self.ss_screen_p.currentData(),
+            serve_enabled=int(self.serve_enabled.isChecked()),
+            serve_port=self.serve_port.value(),
         )
         # mot de passe / clé : vide = inchangé
         for k, w in (("ftp_pass", self.ftp_pass),
@@ -288,8 +290,30 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
                 f"Réglages enregistrés — autostart KO : {e}", 6000)
             self._clear_dirty()
             return
+        # diffusion HTTP : appliquée à chaud (start/stop/rebind du
+        # serveur embarqué, sans redémarrage)
+        from nextevents.serve import SERVER, lan_url
+        port = SERVER.apply(s)
+        self._serve_lbl()
         self._clear_dirty()
-        self.statusBar().showMessage("Réglages enregistrés ✓", 4000)
+        msg = "Réglages enregistrés ✓"
+        if s.get("serve_enabled"):
+            msg += (f" — diffusion sur {lan_url(port)}"
+                    if port else
+                    f" — diffusion KO (port {s['serve_port']} pris ?)")
+        self.statusBar().showMessage(msg, 6000)
+
+    def _serve_lbl(self):
+        """Libellé de l'onglet Destinations : l'URL à ouvrir sur un
+        écran distant (ou le rappel que la diffusion est inactive)."""
+        from nextevents.serve import lan_url
+        port = self.serve_port.value()
+        self.serve_url.setText(
+            f"Écrans distants : ouvrir <b>{lan_url(port)}</b> "
+            f"(diapo du jour : {lan_url(port)}today/)"
+            if self.serve_enabled.isChecked()
+            else "Inactif — les PNG restent aussi copiables via les "
+                 "destinations ci-dessus.")
 
     # ——— réglages modifiés non enregistrés ———
 
@@ -429,6 +453,9 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
         self.ss_tdur_p.setValue(s["ss_tdur_p"] or 1500)
         i = self.ss_screen_p.findData(int(s.get("ss_screen_p") or -1))
         self.ss_screen_p.setCurrentIndex(max(i, 0))
+        self.serve_enabled.setChecked(bool(s.get("serve_enabled")))
+        self.serve_port.setValue(int(s.get("serve_port") or 8090))
+        self._serve_lbl()
         self._refresh_gallery()
 
     # ———————————————————— actions ————————————————————

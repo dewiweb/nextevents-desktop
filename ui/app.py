@@ -1,6 +1,7 @@
 """Application desktop : fenêtre Qt + icône de zone de notification
 (QSystemTrayIcon — Win32 natif / SNI sous Linux) + planificateur."""
 
+import os
 import sys
 import threading
 
@@ -146,6 +147,19 @@ def run(icon_path):
     threading.Thread(target=scheduler, daemon=True).start()
 
     prefs = load_settings()
+    # diffusion HTTP des diapos (--serve force pour ce run ; sinon le
+    # réglage persisté) — écrans distants : Android, kiosk, navigateur
+    if os.environ.get("NEXTEVENTS_SERVE"):
+        prefs["serve_enabled"] = 1
+        if os.environ.get("NEXTEVENTS_SERVE_PORT"):
+            try:
+                prefs["serve_port"] = int(
+                    os.environ["NEXTEVENTS_SERVE_PORT"])
+            except ValueError:
+                pass
+    from nextevents.serve import SERVER
+    SERVER.apply(prefs)
+
     mode = prefs.get("autostart_slideshow", "none")
     if mode in ("landscape", "portrait"):
         QTimer.singleShot(
