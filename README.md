@@ -269,6 +269,9 @@ rafraîchies automatiquement (poll 15 s) :
   diffusion pour ce run (poste d'affichage sans UI).
 - **La page choisit le format seule** : un écran en portrait reçoit les
   diapos 9:16, sinon 16:9 (`?fmt=portrait` force).
+- **Intervalle, type et durée de transition** suivent les réglages
+  Diaporama de l'app (lus à chaque poll — un changement s'applique
+  aux écrans distants sans reload).
 - **Diapo du jour** : servie seule sur `http://<ip>:<port>/today/`.
 
 Lecture seule, GET uniquement, uniquement le dossier de sortie —

@@ -10,7 +10,8 @@ Routage (tout est en lecture seule, dossier de sortie uniquement) :
   /                      page diaporama auto-plein-écran
                          (?fmt=landscape|portrait — sinon déduit de
                          l'orientation de l'écran, repli paysage)
-  /slides.json?fmt=…     liste [nom, mtime_ns] + délai des réglages
+  /slides.json?fmt=…     liste [nom, mtime_ns] + délai/transition
+                         des réglages (suivis en direct)
   /png/<fmt>/<fichier>   un PNG généré (noms strictement validés)
   /today/…               la diapo du jour (index.html autonome)
 
@@ -36,9 +37,8 @@ _PAGE = """<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>nextevents</title><style>
 html,body{margin:0;height:100%;background:#000;overflow:hidden}
 img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;
-    opacity:0;transition:opacity 1.2s}
-img.on{opacity:1}
-#empty{position:absolute;inset:0;z-index:2;display:none;background:#000;
+    opacity:0}
+#empty{position:absolute;inset:0;z-index:5;display:none;background:#000;
     color:#555;font:24px sans-serif;place-items:center;text-align:center}
 </style></head><body>
 <img id="a"><img id="b"><div id="empty">aucune diapo</div>
@@ -50,13 +50,30 @@ const fmt = p.get("fmt") ||
 const imgs = [document.getElementById("a"), document.getElementById("b")];
 const empty = document.getElementById("empty");
 let cur = 0, idx = 0, slides = [], delay = 8, tickTimer = null;
+let trans = "fade", tdur = 1200;   // suivent les réglages ss_* de l'app
 
-function show(i) {            // fondu vers slides[i] (re-téléchargée si mtime≠)
+function show(i) {            // transition vers slides[i] (mtime = re-téléchargée)
     const [name, mtime] = slides[i % slides.length];
-    const nxt = imgs[1 - cur];
-    nxt.onload = () => { nxt.classList.add("on");
-                         imgs[cur].classList.remove("on");
-                         cur = 1 - cur; };
+    const nxt = imgs[1 - cur], old = imgs[cur];
+    nxt.onload = () => {
+        nxt.style.zIndex = 2; old.style.zIndex = 1;
+        if (trans === "slide") {
+            // l'entrante couvre la sortante en glissant de la droite
+            nxt.style.transition = "none";
+            nxt.style.transform = "translateX(100%)";
+            nxt.style.opacity = "1";
+            void nxt.offsetWidth;                 // reflow : pose le départ
+            nxt.style.transition = `transform ${tdur}ms`;
+            nxt.style.transform = "translateX(0)";
+        } else {
+            const ms = trans === "none" ? 0 : tdur;
+            nxt.style.transition = `opacity ${ms}ms`;
+            nxt.style.transform = "";
+            nxt.style.opacity = "1";
+            old.style.opacity = "0";
+        }
+        cur = 1 - cur;
+    };
     nxt.src = `/png/${fmt}/${name}?v=${mtime}`;
 }
 function restart() {          // (re)lance la rotation au délai courant
@@ -75,6 +92,7 @@ async function poll() {
         const changed = JSON.stringify(d.slides) !==
                         JSON.stringify(slides) || d.delay !== delay;
         slides = d.slides; delay = d.delay || 8;
+        trans = d.trans || "fade"; tdur = d.tdur || 1200;
         empty.style.display = slides.length ? "none" : "grid";
         if (idx >= slides.length) idx = 0;
         if (changed || !tickTimer) restart();
@@ -99,11 +117,12 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # silence → app.log déjà verbeux
         pass
 
-    def _send(self, code, body=b"", ctype="text/plain"):
+    def _send(self, code, body=b"", ctype="text/plain",
+              cache="no-store"):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache)
         self.end_headers()
         if body:
             self.wfile.write(body)
@@ -123,20 +142,27 @@ class _Handler(BaseHTTPRequestHandler):
             d = out / fmt
             slides = ([[p.name, p.stat().st_mtime_ns] for p in
                        sorted(d.glob("*.png"))] if d.is_dir() else [])
-            # le délai suit le réglage du diaporama natif (re-lu à
-            # chaque poll — un changement s'applique sans reload)
+            # délai et transition suivent les réglages du diaporama
+            # natif (re-lus à chaque poll — un changement s'applique
+            # sans reload)
             sfx = "_p" if fmt == "portrait" else ""
-            delay = (load_settings().get(f"ss_delay{sfx}") or 8)
-            self._send(200, json.dumps(
-                {"slides": slides, "delay": delay}).encode(),
-                "application/json")
+            s = load_settings()
+            self._send(200, json.dumps({
+                "slides": slides,
+                "delay": s.get(f"ss_delay{sfx}") or 8,
+                "trans": s.get(f"ss_transition{sfx}") or "fade",
+                "tdur": s.get(f"ss_tdur{sfx}") or 1200,
+            }).encode(), "application/json")
             return
 
         m = re.match(r"^/png/(landscape|portrait)/([^/]+)$", path)
         if m and _NAME_RE.match(m.group(2)):
             p = out / m.group(1) / m.group(2)
             if p.is_file():
-                self._send(200, p.read_bytes(), "image/png")
+                # ?v=mtime dans l'URL invalide déjà le cache — pas
+                # besoin de re-télécharger 2 Mo à chaque rotation
+                self._send(200, p.read_bytes(), "image/png",
+                           cache="public, max-age=300")
                 return
             self._send(404)
             return
