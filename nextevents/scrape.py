@@ -113,6 +113,11 @@ SPEC_ICONS = {"Date": "calendar", "Séances": "calendar", "Durée": "timer",
               "Lieu": "pin", "Tarif": "ticket", "Public": "group",
               "Accessibilité": "accessibility"}
 SPRITE_LABELS = {v: k for k, v in SPEC_ICONS.items()}
+# collision : « Date » et « Séances » partagent le sprite calendar —
+# l'inversion garde la dernière clé (« Séances »), donc le spec date
+# de la bannière détail s'ajoutait en doublon de « Date » sur la carte.
+# Sur la bannière ce sprite désigne toujours la date : « Date » gagne.
+SPRITE_LABELS["calendar"] = "Date"
 SPEC_ORDER = ["Date", "Séances", "Durée", "Lieu", "Tarif", "Public",
               "Accessibilité"]
 
