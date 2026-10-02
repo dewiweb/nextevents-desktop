@@ -59,11 +59,18 @@ class GalleryTabMixin:
         rm.setToolTip("Supprimer la sélection (Suppr)")
         rm.clicked.connect(self._delete_selected)
         row.addWidget(rm)
+        pr = QPushButton("Imprimer…")
+        pr.setProperty("ghost", True)
+        pr.setToolTip("Imprimer la sélection — ou toute la galerie "
+                      "active si rien n'est sélectionné")
+        pr.clicked.connect(self._print_gallery)
+        row.addWidget(pr)
         row.addStretch(1)
         lay.addLayout(row)
 
         self.galleries = {}
         inner = QTabWidget()
+        self._gal_inner = inner
         inner.setDocumentMode(True)
         # suffixe réglages, sous-dossier, titre d'onglet, taille vignette
         for sfx, sub, label, tw, th in (
@@ -214,6 +221,34 @@ class GalleryTabMixin:
             return
         from .preview import preview_image
         preview_image(self, resolve_out_dir() / rel, it.text())
+
+    def _print_items(self, items):
+        """Imprime les diapos sélectionnées — une par page via le
+        dialogue natif (qui permet aussi « imprimer en PDF »)."""
+        from .printing import print_images
+        d = resolve_out_dir()
+        paths = sorted(d / it.data(Qt.UserRole) for it in items)
+        print_images(paths, self)
+
+    def _print_gallery(self):
+        """Bouton « Imprimer… » : la sélection s'il y en a une, sinon
+        toute la galerie de l'onglet actif (avec confirmation — ça
+        peut faire plusieurs dizaines de pages)."""
+        sel = [it for g in self.galleries.values()
+               for it in g.selectedItems() if it.data(Qt.UserRole)]
+        if sel:
+            self._print_items(sel)
+            return
+        gal = self._gal_inner.currentWidget().findChild(QListWidget) \
+            if self._gal_inner else None
+        items = [gal.item(i) for i in range(gal.count())
+                 if gal.item(i).data(Qt.UserRole)] if gal else []
+        if not items:
+            self.statusBar().showMessage("Rien à imprimer", 4000)
+            return
+        from .printing import ask_print_all
+        if ask_print_all(len(items), self):
+            self._print_items(items)
 
     def _refresh_gallery(self):
         """Recharge la liste puis décode les vignettes dans un thread —
@@ -467,7 +502,12 @@ class GalleryTabMixin:
             if url:
                 m.addAction("Ouvrir la fiche de l'événement").triggered\
                     .connect(lambda: QDesktopServices.openUrl(QUrl(url)))
-        if gal.selectedItems():
+        sel = [it for g in self.galleries.values()
+               for it in g.selectedItems() if it.data(Qt.UserRole)]
+        if sel:
+            m.addAction(
+                f"Imprimer {'la sélection' if len(sel) > 1 else 'cette diapo'}…"
+            ).triggered.connect(lambda: self._print_items(sel))
             m.addAction("Supprimer la sélection…").triggered.connect(
                 self._delete_selected)
         if m.actions():
