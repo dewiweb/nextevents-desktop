@@ -129,11 +129,20 @@ class SlideshowWindow(QMainWindow):
     def _apply_screen(self):
         """Bascule le plein écran sur l'écran configuré — un poste de
         diffusion a typiquement un écran de contrôle + un écran public
-        (le fullscreen allait toujours sur le principal)."""
+        (le fullscreen allait toujours sur le principal).
+        setScreen seul est ignoré quand la fenêtre n'a pas encore sa
+        géométrie réalisée : on positionne aussi le cadre sur la
+        géométrie de l'écran cible — Windows place le fullscreen sur
+        l'écran couvert majoritairement par la fenêtre."""
         target = self._target_screen()
         if target is not None:
             self.winId()  # crée le handle natif — requis avant setScreen
             self.windowHandle().setScreen(target)
+            self.setGeometry(target.geometry())
+            if self.isFullScreen():
+                # déjà affiché : le fullscreen se redéploie sur
+                # l'écran couvert par la nouvelle géométrie
+                self.showFullScreen()
 
     # ——— liste et réglages ———
 
