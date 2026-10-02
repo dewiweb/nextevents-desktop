@@ -225,9 +225,13 @@ def render_png_firefox(html_path, png_path, size=DEFAULT_SIZE,
     html_path = Path(html_path).resolve()
     png_path = Path(png_path)
     zoomed = html_path.with_suffix(".zoom.html")
+    # body{background:#000} : --screenshot ne gère pas l'alpha —
+    # sans ça les coins arrondis sortiraient blancs
     zoomed.write_text(
         html_path.read_text("utf-8").replace(
-            "</head>", f"<style>html{{zoom:{w / dw}}}</style></head>"
+            "</head>",
+            f"<style>html{{zoom:{w / dw}}}"
+            "body{background:#000 !important}</style></head>",
         ),
         encoding="utf-8",
     )
@@ -311,8 +315,10 @@ def render_all(slides, size=DEFAULT_SIZE, orientation="landscape"):
             try:
                 page.goto(Path(hp).resolve().as_uri())
                 page.wait_for_function("document.fonts.status === 'loaded'")
-                shot = page.screenshot()
-                img = Image.open(io.BytesIO(shot)).convert("RGB")
+                # omit_background : le fond <body> transparent reste
+                # transparent dans le PNG (coins arrondis de la carte)
+                shot = page.screenshot(omit_background=True)
+                img = Image.open(io.BytesIO(shot))
                 if img.size != size:
                     img = img.resize(size, Image.LANCZOS)
                 _save_atomic(img, pp)

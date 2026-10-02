@@ -45,11 +45,13 @@ html, body {
     overflow: hidden;
 }
 
-/* #000 : marge sombre autour de la carte arrondie. */
+/* transparent : marge autour de la carte arrondie — le PNG garde
+   un canal alpha (screenshot omit_background) ; à l'écran le noir du
+   player transparaît, à l'impression c'est le blanc du papier. */
 body {
     font-family: 'Oldschool Grotesk', Arial, sans-serif;
     color: $ink;
-    background: #000;
+    background: transparent;
     display: flex;
     flex-direction: column;
 }

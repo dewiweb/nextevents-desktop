@@ -5,7 +5,7 @@ galerie est donc inclus sans code supplémentaire."""
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QMarginsF, Qt
 from PySide6.QtGui import QImage, QPageLayout, QPainter
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter
 from PySide6.QtWidgets import QMessageBox
@@ -38,10 +38,19 @@ def print_images(paths, parent=None):
         lay.setOrientation(
             QPageLayout.Landscape if img.width() > img.height()
             else QPageLayout.Portrait)
+        # pleine page : pageRect() par défaut exclut les marges du
+        # pilote (~10 mm) — la diapo A4, même ratio que la feuille,
+        # n'occupait alors pas toute la largeur
+        lay.setMode(QPageLayout.FullPageMode)
+        lay.setMargins(QMarginsF(0, 0, 0, 0))
         printer.setPageLayout(lay)
         if i:
             printer.newPage()
         rect = printer.pageRect(QPrinter.DevicePixel)
+        # blanc sous l'image : les coins arrondis du PNG sont
+        # transparents (alpha) — sur papier ils doivent être blancs
+        painter.fillRect(
+            0, 0, int(rect.width()), int(rect.height()), Qt.white)
         scaled = img.scaled(
             int(rect.width()), int(rect.height()),
             Qt.KeepAspectRatio, Qt.SmoothTransformation)
