@@ -175,7 +175,10 @@ class GalleryTabMixin:
                 w.activateWindow()
                 return
         sfx = "_p" if portrait else ""
-        scr = int(load_settings().get(f"ss_screen{sfx}") or -1)
+        # pas de « or -1 » : l'index 0 (« Écran 1 ») est falsy et
+        # retombait sur l'écran par défaut
+        v = load_settings().get(f"ss_screen{sfx}", -1)
+        scr = -1 if v in (None, "") else int(v)
         win = SlideshowWindow(portrait=portrait, screen_idx=scr,
                               start_at=start_at)
         win.setAttribute(Qt.WA_DeleteOnClose)

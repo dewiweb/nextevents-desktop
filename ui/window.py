@@ -421,13 +421,15 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
         self.ss_transition.setCurrentIndex(
             max(0, self.ss_transition.findData(s["ss_transition"])))
         self.ss_tdur.setValue(s["ss_tdur"] or 1500)
-        i = self.ss_screen.findData(int(s.get("ss_screen") or -1))
+        v = s.get("ss_screen")
+        i = self.ss_screen.findData(-1 if v in (None, "") else int(v))
         self.ss_screen.setCurrentIndex(max(i, 0))
         self.ss_delay_p.setValue(s["ss_delay_p"] or 8)
         self.ss_transition_p.setCurrentIndex(
             max(0, self.ss_transition_p.findData(s["ss_transition_p"])))
         self.ss_tdur_p.setValue(s["ss_tdur_p"] or 1500)
-        i = self.ss_screen_p.findData(int(s.get("ss_screen_p") or -1))
+        v = s.get("ss_screen_p")
+        i = self.ss_screen_p.findData(-1 if v in (None, "") else int(v))
         self.ss_screen_p.setCurrentIndex(max(i, 0))
         self._refresh_gallery()
 

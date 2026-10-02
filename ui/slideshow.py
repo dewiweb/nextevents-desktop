@@ -112,6 +112,10 @@ class SlideshowWindow(QMainWindow):
         self._reloader.start()
         self._apply_screen()
         self.showFullScreen()
+        # sécurité Windows : le setScreen/setGeometry pré-show peut être
+        # ignoré — re-vérification après affichage, _apply_screen se
+        # repositionne si la fenêtre n'est pas sur l'écran cible
+        QTimer.singleShot(300, self._apply_screen)
         # différé : le premier _show doit voir la géométrie plein écran
         # (sinon la transition "glissement" part d'une largeur fausse)
         QTimer.singleShot(0, self._reload)
@@ -128,21 +132,25 @@ class SlideshowWindow(QMainWindow):
 
     def _apply_screen(self):
         """Bascule le plein écran sur l'écran configuré — un poste de
-        diffusion a typiquement un écran de contrôle + un écran public
-        (le fullscreen allait toujours sur le principal).
-        setScreen seul est ignoré quand la fenêtre n'a pas encore sa
-        géométrie réalisée : on positionne aussi le cadre sur la
-        géométrie de l'écran cible — Windows place le fullscreen sur
-        l'écran couvert majoritairement par la fenêtre."""
+        diffusion a typiquement un écran de contrôle + un écran public.
+        Windows place le fullscreen sur l'écran couvert par la fenêtre :
+        setScreen seul ne suffit pas, il faut porter la géométrie —
+        et sortir du fullscreen d'abord quand la fenêtre est visible
+        (setGeometry est ignoré en plein écran)."""
         target = self._target_screen()
-        if target is not None:
-            self.winId()  # crée le handle natif — requis avant setScreen
-            self.windowHandle().setScreen(target)
-            self.setGeometry(target.geometry())
-            if self.isFullScreen():
-                # déjà affiché : le fullscreen se redéploie sur
-                # l'écran couvert par la nouvelle géométrie
-                self.showFullScreen()
+        if target is None:
+            return
+        if (self.isVisible() and self.screen() is not None
+                and self.screen().name() == target.name()):
+            return  # déjà sur le bon écran
+        self.winId()  # crée le handle natif — requis avant setScreen
+        was_full = self.isFullScreen()
+        if was_full:
+            self.showNormal()
+        self.windowHandle().setScreen(target)
+        self.setGeometry(target.geometry())
+        if self.isVisible() or was_full:
+            self.showFullScreen()
 
     # ——— liste et réglages ———
 
@@ -162,11 +170,13 @@ class SlideshowWindow(QMainWindow):
         self._tdur = s.get(f"ss_tdur{sfx}") or 1500
         # écran : le réglage est re-lu comme les autres — un poste
         # re-câblé (ou un écran remplacé) bascule au prochain poll
-        new_idx = int(s.get(f"ss_screen{sfx}") or -1)
+        # pas de « or -1 » : l'index 0 (« Écran 1 ») est falsy et
+        # retombait sur l'écran par défaut — celui de l'app
+        v = s.get(f"ss_screen{sfx}", -1)
+        new_idx = -1 if v in (None, "") else int(v)
         if new_idx != self._screen_idx:
             self._screen_idx = new_idx
             self._apply_screen()
-            self.showFullScreen()
         files = self._files()
         names = [p.name for p in files]
         # nom + mtime : une régénération réécrivant le même fichier
