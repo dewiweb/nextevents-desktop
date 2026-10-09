@@ -9,8 +9,8 @@ génération du HTML+PNG et envoi vers les partages configurés.
 import json
 import threading
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPixmap
+from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QComboBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
     QPlainTextEdit, QPushButton, QScrollArea, QVBoxLayout, QWidget,
@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 from nextevents.settings import load_settings, resolve_out_dir
 from nextevents.scrape import series_brand
 from nextevents.slide import SIZES, DEFAULT_SIZE
+from .style import PLUS_IMG, X_IMG
 
 BG_CHOICES = [
     ("#141414", "Encre"), ("#302f2e", "Anthracite"),
@@ -144,8 +145,10 @@ class TodayTab(QWidget):
         self._spk_box = QVBoxLayout()
         form.addLayout(self._spk_box)
         row = QHBoxLayout()
-        add = QPushButton("+ intervenant")
+        add = QPushButton(" Ajouter un intervenant")
         add.setProperty("ghost", True)
+        add.setIcon(QIcon(PLUS_IMG))
+        add.setIconSize(QSize(13, 13))
         add.setToolTip("Ajoute une ligne intervenant : nom et qualité "
                        "(fonction, affiliation).")
         add.clicked.connect(lambda: self._add_speaker("", ""))
@@ -299,9 +302,12 @@ class TodayTab(QWidget):
         n.setFixedWidth(230)
         q = QLineEdit(qual,
                       placeholderText="Qualité (fonction, affiliation…)")
-        x = QPushButton("×")
+        x = QPushButton()
         x.setProperty("ghost", True)
+        x.setIcon(QIcon(X_IMG))
+        x.setIconSize(QSize(12, 12))
         x.setFixedWidth(32)
+        x.setToolTip("Retirer cet intervenant")
         x.clicked.connect(
             lambda: (self._spk_box.removeWidget(row),
                      row.deleteLater()))

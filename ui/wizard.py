@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 from nextevents.settings import (
     OUT_DIR, load_settings, save_settings,
 )
-from .style import _pw
+from .style import _pw, browse_btn
 
 INTRO, SCREEN, OUTPUT, DEST, FINAL = range(5)
 
@@ -286,10 +286,7 @@ class _DestPage(_Page):
             f"(vide = dossier intégré : {OUT_DIR})")
         row = QHBoxLayout()
         row.addWidget(w.out_dir, 1)
-        b = QPushButton("…")
-        b.setProperty("ghost", True)
-        b.setFixedWidth(36)
-        b.clicked.connect(self._browse)
+        b = browse_btn(self._browse)
         row.addWidget(b)
         f.addRow("Écrire dans", row)
         self.lay.addWidget(box)
@@ -301,10 +298,7 @@ class _DestPage(_Page):
             "D:\\diaporama ou \\\\serveur\\partage\\dossier")
         row = QHBoxLayout()
         row.addWidget(w.local_dir, 1)
-        b = QPushButton("…")
-        b.setProperty("ghost", True)
-        b.setFixedWidth(36)
-        b.clicked.connect(lambda: self._browse_to(w.local_dir))
+        b = browse_btn(lambda: self._browse_to(w.local_dir))
         row.addWidget(b)
         f.addRow("Vers", row)
         self.lay.addWidget(self.mirror_box)

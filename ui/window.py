@@ -16,7 +16,7 @@ import threading
 from datetime import datetime
 
 from PySide6.QtCore import (
-    QDate, QTimer, Signal,
+    QDate, QSize, QTimer, Signal,
 )
 from PySide6.QtGui import (
     QIcon, QKeySequence, QShortcut,
@@ -31,7 +31,7 @@ from nextevents.settings import (
     load_settings, save_settings, state, parse_kv,
     DEFAULT_NEXT_LABEL,
 )
-from .style import STYLE, WheelGuard  # noqa: F401 — ré-export pour ui.app
+from .style import HELP_IMG, STYLE, WheelGuard  # noqa: F401 — ré-export pour ui.app
 from .tabs_general import GeneralTabMixin
 from .tabs_destinations import DestinationsTabMixin
 from .tabs_gallery import GalleryTabMixin
@@ -199,8 +199,10 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
             "Enregistrer les réglages (Ctrl+S)")
         self.save_btn.clicked.connect(self._save)
         lay.addWidget(self.save_btn)
-        help_btn = QPushButton("?")
+        help_btn = QPushButton()
         help_btn.setProperty("ghost", True)
+        help_btn.setIcon(QIcon(HELP_IMG))
+        help_btn.setIconSize(QSize(16, 16))
         help_btn.setFixedWidth(38)
         help_btn.setToolTip("Aide — rubrique de l'onglet courant (F1)")
         help_btn.clicked.connect(self._show_help)

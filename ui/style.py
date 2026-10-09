@@ -44,6 +44,14 @@ from pathlib import Path
 _base = Path(getattr(sys, "_MEIPASS",
                      Path(__file__).resolve().parent.parent))
 CHECK_IMG = (_base / "assets" / "check.svg").as_posix()
+ARROW_DOWN = (_base / "assets" / "arrow-down.svg").as_posix()
+ARROW_UP = (_base / "assets" / "arrow-up.svg").as_posix()
+ARROW_LEFT = (_base / "assets" / "arrow-left.svg").as_posix()
+ARROW_RIGHT = (_base / "assets" / "arrow-right.svg").as_posix()
+FOLDER_IMG = (_base / "assets" / "folder.svg").as_posix()
+HELP_IMG = (_base / "assets" / "help.svg").as_posix()
+PLUS_IMG = (_base / "assets" / "plus.svg").as_posix()
+X_IMG = (_base / "assets" / "x.svg").as_posix()
 
 STYLE = f"""
 QMainWindow, QWidget {{ background:{BG}; color:{INK};
@@ -71,6 +79,36 @@ QLineEdit, QSpinBox, QComboBox, QPlainTextEdit {{ background:{BG};
     padding:6px 10px }}
 QLineEdit:focus, QSpinBox:focus, QComboBox:focus,
 QPlainTextEdit:focus {{ border-color:#5a5652 }}
+QComboBox::drop-down {{ width:24px; border:0 }}
+QComboBox::down-arrow {{ image:url({ARROW_DOWN});
+    width:11px; height:11px }}
+QComboBox::down-arrow:disabled {{ image:none }}
+QComboBox QAbstractItemView {{ background:{CARD}; color:{INK};
+    border:1px solid #302f2e;
+    selection-background-color:#302f2e; outline:0 }}
+QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {{
+    background:#262524; width:18px; border:0 }}
+QAbstractSpinBox::up-button:hover,
+QAbstractSpinBox::down-button:hover {{ background:#3a3836 }}
+QAbstractSpinBox::up-arrow {{ image:url({ARROW_UP});
+    width:9px; height:9px }}
+QAbstractSpinBox::down-arrow {{ image:url({ARROW_DOWN});
+    width:9px; height:9px }}
+QScrollBar:vertical {{ background:transparent; width:12px; margin:0 }}
+QScrollBar:horizontal {{ background:transparent; height:12px; margin:0 }}
+QScrollBar::handle {{ background:#302f2e; border-radius:6px;
+    min-height:30px; min-width:30px }}
+QScrollBar::handle:hover {{ background:#3a3836 }}
+QScrollBar::add-line, QScrollBar::sub-line {{ height:0; width:0;
+    border:0; background:transparent }}
+QScrollBar::add-page, QScrollBar::sub-page {{ background:transparent }}
+QTabBar QToolButton {{ color:{INK}; background:{CARD} }}
+QTabBar QToolButton:hover {{ color:{ACCENT} }}
+QCalendarWidget QToolButton {{ color:{INK} }}
+QCalendarWidget QToolButton#qt_calendar_prev {{
+    qproperty-icon:url({ARROW_LEFT}) }}
+QCalendarWidget QToolButton#qt_calendar_next {{
+    qproperty-icon:url({ARROW_RIGHT}) }}
 QPushButton {{ background:#302f2e; color:{INK}; border:0;
     border-radius:8px; padding:9px 20px; font-weight:500 }}
 QPushButton:hover {{ background:#3a3836 }}
@@ -115,3 +153,19 @@ def _pw(ph):
     w.setEchoMode(QLineEdit.Password)
     w.setPlaceholderText(ph)
     return w
+
+
+def browse_btn(cb):
+    """Bouton fantôme « choisir un dossier » — icône dossier claire
+    (le glyphe « … » était quasi invisible sur le thème sombre)."""
+    from PySide6.QtCore import QSize
+    from PySide6.QtGui import QIcon
+    from PySide6.QtWidgets import QPushButton
+    b = QPushButton()
+    b.setProperty("ghost", True)
+    b.setIcon(QIcon(FOLDER_IMG))
+    b.setIconSize(QSize(15, 15))
+    b.setFixedWidth(36)
+    b.setToolTip("Choisir un dossier…")
+    b.clicked.connect(cb)
+    return b

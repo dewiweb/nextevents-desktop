@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from nextevents.settings import OUT_DIR, load_settings
-from .style import _pw
+from .style import _pw, browse_btn
 
 
 class DestinationsTabMixin:
@@ -46,10 +46,7 @@ class DestinationsTabMixin:
             "data/diaporama à côté de l'exécutable.")
         row = QHBoxLayout()
         row.addWidget(self.out_dir, 1)
-        b = QPushButton("…")
-        b.setProperty("ghost", True)
-        b.setFixedWidth(36)
-        b.clicked.connect(lambda: self._browse(self.out_dir))
+        b = browse_btn(lambda: self._browse(self.out_dir))
         row.addWidget(b)
         f.addRow("Dossier de sortie", row)
         self.local_dir = QLineEdit()
@@ -63,10 +60,7 @@ class DestinationsTabMixin:
             "FTP.")
         row = QHBoxLayout()
         row.addWidget(self.local_dir, 1)
-        b = QPushButton("…")
-        b.setProperty("ghost", True)
-        b.setFixedWidth(36)
-        b.clicked.connect(lambda: self._browse(self.local_dir))
+        b = browse_btn(lambda: self._browse(self.local_dir))
         row.addWidget(b)
         f.addRow("Copie miroir vers", row)
         row = QHBoxLayout()
