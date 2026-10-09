@@ -38,12 +38,26 @@ class GeneralTabMixin:
                                  suffix=" min (0 = off)")
         self.interval.setSingleStep(5)
         self.interval.setFixedWidth(160)
+        self.interval.setToolTip(
+            "Régénère les diapos automatiquement toutes les N minutes.\n"
+            "0 = pas de rafraîchissement automatique (génération "
+            "manuelle ou heures fixes).")
         self.sched_times = QLineEdit()
         self.sched_times.setPlaceholderText("ex. 06:00, 18:30")
         self.sched_times.setFixedWidth(190)
+        self.sched_times.setToolTip(
+            "Heures fixes de génération au format HH:MM, séparées par "
+            "des virgules — cumulables avec l'intervalle. Les diapos "
+            "sont aussi à jour dès l'ouverture du poste si « Lancer "
+            "l'application à l'ouverture de session » est coché.")
         # limitation des diapos : nombre, horizon en jours, ou date
         self.limit_mode = QComboBox()
         self.limit_mode.setFixedWidth(190)
+        self.limit_mode.setToolTip(
+            "Quelles diapos produire : les N premiers événements à "
+            "venir, tout ce qui a lieu dans les N prochains jours, "
+            "ou tout jusqu'à une date. Un événement en cours "
+            "(expo permanente…) reste affiché.")
         self.limit_mode.addItem("Premiers N événements", "count")
         self.limit_mode.addItem("Dans les N jours", "days")
         self.limit_mode.addItem("Jusqu'au …", "date")
@@ -51,10 +65,18 @@ class GeneralTabMixin:
         self.maxev = QSpinBox(minimum=0, maximum=999,
                               suffix=" (0 = tous)")
         self.maxev.setFixedWidth(160)
+        self.maxev.setToolTip(
+            "Nombre maximum de diapos générées (0 = tous les "
+            "événements).")
         self.limit_days = QSpinBox(minimum=1, maximum=365, value=14,
                                    suffix=" jours")
         self.limit_days.setFixedWidth(160)
+        self.limit_days.setToolTip(
+            "Inclut les événements dont la fenêtre touche les N "
+            "prochains jours.")
         self.limit_date = QDateEdit(calendarPopup=True)
+        self.limit_date.setToolTip(
+            "Inclut les événements jusqu'à cette date (incluse).")
         self.limit_date.setFixedWidth(160)
         self.limit_date.setDate(
             QDate.currentDate().addDays(30))
@@ -70,11 +92,25 @@ class GeneralTabMixin:
         row.addStretch(1)
         self.res = QComboBox()
         self.res.setFixedWidth(220)
+        self.res.setToolTip(
+            "Taille des PNG générés. UHD pour les écrans 4K ; HD "
+            "suffit pour la plupart des diffusions et des impressions "
+            "courantes.")
         self.res.addItem("UHD 3840×2160", "uhd")
         self.res.addItem("HD 1920×1080", "hd")
         self.gen_ls = QCheckBox("Paysage — dans le dossier de sortie")
+        self.gen_ls.setToolTip(
+            "Produit les diapos 16:9 dans landscape/ — TV, diaporama "
+            "paysage, écrans de la médiathèque.")
         self.gen_pt = QCheckBox("Portrait — sous-dossier portrait/")
+        self.gen_pt.setToolTip(
+            "Produit les diapos dans portrait/ — impression A4 ou "
+            "écran pivoté 9:16 selon le format choisi.")
         self.portrait_fmt = QComboBox()
+        self.portrait_fmt.setToolTip(
+            "A4 : pour l'impression (marges et densité adaptées).\n"
+            "Écran 9:16 : écran 16:9 monté en vertical (totem, "
+            "borne).")
         self.portrait_fmt.addItem("A4 — impression", "a4")
         self.portrait_fmt.addItem("Écran 9:16 — diffusion", "screen")
         self.portrait_fmt.setEnabled(False)
@@ -99,6 +135,9 @@ class GeneralTabMixin:
         from nextevents.scrape import CATEGORIES
         for i, (label, slug) in enumerate(CATEGORIES):
             cb = QCheckBox(label)
+            cb.setToolTip(
+                "Inclure cette catégorie d'événements dans la "
+                "génération — décocher pour l'exclure.")
             self._cat_boxes[slug] = cb
             grid.addWidget(cb, i // 2, i % 2)
         f.addRow(grid)
@@ -115,7 +154,14 @@ class GeneralTabMixin:
                     "Accessibilité"):
             cb = QCheckBox(key)
             cb.setChecked(True)
+            cb.setToolTip(
+                f"Afficher « {key} » sur les diapos — décocher pour "
+                "masquer cette information partout.")
             ov = QLineEdit(placeholderText="valeur forcée (optionnel)")
+            ov.setToolTip(
+                f"Force la valeur affichée pour « {key} » sur toutes "
+                "les diapos (ex. Lieu = Auditorium). Vide = valeur "
+                "de la source.")
             ov.setMinimumWidth(220)
             row = QHBoxLayout()
             row.addWidget(cb)
@@ -146,6 +192,14 @@ class GeneralTabMixin:
         self.series_map.setMaximumHeight(72)
         self.series_map.setPlaceholderText(
             "grandstemoins = Les grands témoins | logo-gt.png")
+        self.series_map.setToolTip(
+            "Une ligne par série éditoriale :\n"
+            "« identifiant = Libellé affiché »\n"
+            "« identifiant = Libellé | logo.png » pour ajouter le "
+            "logo de la série.\n"
+            "L'identifiant est le slug de la page série du site ou "
+            "un mot-clé OpenAgenda — le bouton « Détecter » propose "
+            "les candidats trouvés dans les sources.")
         f.addRow(self.series_map)
         row = QHBoxLayout()
         det = QPushButton("Détecter dans les sources")
@@ -163,16 +217,32 @@ class GeneralTabMixin:
         f = QFormLayout(oa)
         f.setLabelAlignment(Qt.AlignRight)
         self.data_source = QComboBox()
+        self.data_source.setToolTip(
+            "« Site web » lit les événements sur leschampslibres.fr "
+            "(couleur éditoriale de la carte incluse).\n"
+            "« OpenAgenda » interroge l'API avec la clé ci-dessous — "
+            "si elle est injoignable, la génération replie "
+            "automatiquement sur le site.")
         self.data_source.addItem("Site web (scraping)", "site")
         self.data_source.addItem("OpenAgenda", "openagenda")
         f.addRow("Source", self.data_source)
         self.oa_agenda = QLineEdit(placeholderText="leschampslibres")
+        self.oa_agenda.setToolTip(
+            "Identifiant de l'agenda OpenAgenda (le slug visible dans "
+            "l'URL openagenda.com/agendas/…).")
         self.oa_key = _pw("(non défini)")
+        self.oa_key.setToolTip(
+            "Clé API OpenAgenda (gratuite, compte sur openagenda.com)."
+            "\nInutile si la source est « Site web ». Stockée dans "
+            "le trousseau du système quand il existe.")
         f.addRow("Agenda", self.oa_agenda)
         f.addRow("Clé API", self.oa_key)
         row = QHBoxLayout()
         t = QPushButton("Tester la clé")
         t.setProperty("ghost", True)
+        t.setToolTip(
+            "Interroge l'API OpenAgenda avec l'agenda et la clé "
+            "saisis — vérifie qu'ils répondent avant de générer.")
         t.clicked.connect(lambda: self._test("oa"))
         row.addWidget(t)
         self.oa_test = QLabel("")
@@ -213,6 +283,10 @@ class GeneralTabMixin:
         f.addRow("Session", self.autostart_app)
         self.autostart_ss = QComboBox()
         self.autostart_ss.setFixedWidth(220)
+        self.autostart_ss.setToolTip(
+            "Ouvre automatiquement le diaporama au lancement de "
+            "l'app — à combiner avec « Lancer l'application à "
+            "l'ouverture de session » sur un poste d'affichage.")
         self.autostart_ss.addItem("Pas de diaporama", "none")
         self.autostart_ss.addItem("Diaporama paysage", "landscape")
         self.autostart_ss.addItem("Diaporama portrait", "portrait")

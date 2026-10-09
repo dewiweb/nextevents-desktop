@@ -127,6 +127,7 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
         tabs.addTab(self.today_tab, "Diapo du jour")
         tabs.addTab(self._tab_ss, "Galerie")
         tabs.setCurrentIndex(0)
+        self._tabs = tabs
         root.addWidget(tabs, 1)
         self.setCentralWidget(central)
 
@@ -135,10 +136,11 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
         self.statusBar().addPermanentWidget(self.sched_lbl)
         self.statusBar().showMessage(
             "Ctrl+G générer · Ctrl+S enregistrer · "
-            "F11 diaporama · Échap quitter le diaporama")
+            "F11 diaporama · F1 aide · Échap quitter le diaporama")
 
         QShortcut(QKeySequence("Ctrl+G"), self, activated=self._run)
         QShortcut(QKeySequence("Ctrl+S"), self, activated=self._save)
+        QShortcut(QKeySequence("F1"), self, activated=self._show_help)
         QShortcut(QKeySequence("F11"), self,
                   activated=lambda: self._open_slideshow(False))
         QShortcut(QKeySequence("F5"), self,
@@ -197,6 +199,12 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
             "Enregistrer les réglages (Ctrl+S)")
         self.save_btn.clicked.connect(self._save)
         lay.addWidget(self.save_btn)
+        help_btn = QPushButton("?")
+        help_btn.setProperty("ghost", True)
+        help_btn.setFixedWidth(38)
+        help_btn.setToolTip("Aide — rubrique de l'onglet courant (F1)")
+        help_btn.clicked.connect(self._show_help)
+        lay.addWidget(help_btn)
         return h
 
     # ———————————————————— réglages ————————————————————
@@ -438,6 +446,28 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
     def _run(self):
         if state["running"]:
             return
+        # pré-flight : un blocage empêche le run, un avertissement
+        # demande confirmation — partir sur des réglages faux produit
+        # un journal d'erreurs peu lisible pour l'utilisateur
+        from nextevents.preflight import validate_settings
+        from PySide6.QtWidgets import QMessageBox
+        issues = validate_settings(load_settings())
+        blockers = [i for i in issues if i.level == "blocker"]
+        if blockers:
+            QMessageBox.warning(
+                self, "Génération impossible",
+                "Corrigez d'abord ces réglages :\n\n" + "\n".join(
+                    f"• {i.msg}  (onglet {i.tab})" for i in blockers))
+            return
+        if issues:
+            r = QMessageBox.question(
+                self, "Réglages à vérifier",
+                "La génération peut partir, mais :\n\n" + "\n".join(
+                    f"• {i.msg}  (onglet {i.tab})" for i in issues)
+                + "\n\nGénérer quand même ?",
+                QMessageBox.Yes | QMessageBox.No)
+            if r != QMessageBox.Yes:
+                return
         self.run_btn.setEnabled(False)
         self.log.clear()
         self._log_seen = 0
@@ -445,6 +475,12 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
 
     def _run_bg(self):
         run_generation()
+
+    def _show_help(self):
+        """Dialog d'aide sur la rubrique de l'onglet courant —
+        les index de ui.help.TOPICS suivent l'ordre des onglets."""
+        from .help import HelpDialog
+        HelpDialog(self, self._tabs.currentIndex()).exec()
 
     def _after_generate(self):
         self._refresh_gallery()

@@ -48,10 +48,16 @@ class GalleryTabMixin:
         row.addWidget(rf)
         od = QPushButton("Ouvrir le dossier de sortie")
         od.setProperty("ghost", True)
+        od.setToolTip("Ouvre le dossier où les diapos sont écrites "
+                      "dans le gestionnaire de fichiers.")
         od.clicked.connect(lambda: self._open_dir(resolve_out_dir()))
         row.addWidget(od)
         dl = QPushButton("Exporter en .zip")
         dl.setProperty("ghost", True)
+        dl.setToolTip(
+            "Archive toutes les diapos (paysage + portrait + diapo "
+            "du jour) dans un fichier .zip — pratique pour les "
+            "transmettre à des partenaires.")
         dl.clicked.connect(self._download_zip)
         row.addWidget(dl)
         rm = QPushButton("Supprimer")
@@ -86,16 +92,25 @@ class GalleryTabMixin:
             h = QHBoxLayout()
             delay = QSpinBox(minimum=2, maximum=3600, suffix=" s")
             delay.setFixedWidth(110)
+            delay.setToolTip("Temps d'affichage de chaque diapo.")
             trans = QComboBox()
             trans.setFixedWidth(150)
+            trans.setToolTip("Effet de transition entre les diapos.")
             trans.addItem("Aucune", "none")
             trans.addItem("Fondu", "fade")
             trans.addItem("Glissement", "slide")
             tdur = QSpinBox(minimum=0, maximum=10000, singleStep=100,
                             suffix=" ms")
             tdur.setFixedWidth(110)
+            tdur.setToolTip(
+                "Durée de la transition (sans effet si « Aucune »).")
             screen = QComboBox()
             screen.setFixedWidth(210)
+            screen.setToolTip(
+                "Écran sur lequel le diaporama s'ouvre — « Écran "
+                "principal » = celui de l'app. Le choix est relu en "
+                "continu : un écran rebranché est pris en compte "
+                "sans relancer le player.")
             screen.addItem("Écran principal", -1)
             # écran de diffusion sur les postes multi-sorties — l'index
             # stocké dans ss_screen* est celui de QApplication.screens()
@@ -124,6 +139,8 @@ class GalleryTabMixin:
             h2.addStretch(1)
             b = QPushButton("Ouvrir le slideshow")
             b.setProperty("ghost", True)
+            b.setToolTip("Diaporama plein écran sur l'écran choisi — "
+                         "Échap pour quitter.")
             b.clicked.connect(lambda _=False, p=bool(sfx):
                               self._open_slideshow(p))
             h2.addWidget(b)
@@ -148,6 +165,11 @@ class GalleryTabMixin:
             # plancher bas : la liste peut rétrécir, le scroll de page
             # prend le relais plutôt que de couper le groupe Lecture
             gal.setMinimumHeight(150)
+            gal.setToolTip(
+                "Double-clic : aperçu grand format.\n"
+                "Clic droit : régénérer, lancer le diaporama depuis "
+                "cette diapo, supprimer.\n"
+                "Suppr : supprimer la sélection.")
             gal.itemDoubleClicked.connect(self._preview_slide)
             QShortcut(QKeySequence.Delete, gal,
                       context=Qt.WidgetWithChildrenShortcut,

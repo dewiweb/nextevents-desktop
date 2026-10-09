@@ -40,6 +40,10 @@ class DestinationsTabMixin:
         self.out_dir = QLineEdit()
         self.out_dir.setPlaceholderText(
             "(vide = dossier intégré de l'app)")
+        self.out_dir.setToolTip(
+            "Dossier où les diapos sont écrites (disque local ou "
+            "lecteur réseau). Vide = dossier intégré de l'app, "
+            "data/diaporama à côté de l'exécutable.")
         row = QHBoxLayout()
         row.addWidget(self.out_dir, 1)
         b = QPushButton("…")
@@ -51,6 +55,12 @@ class DestinationsTabMixin:
         self.local_dir = QLineEdit()
         self.local_dir.setPlaceholderText(
             "D:\\diaporama ou \\\\serveur\\partage\\dossier")
+        self.local_dir.setToolTip(
+            "Copie miroir après chaque génération : le dossier "
+            "reflète exactement la sortie (fichiers obsolètes "
+            "supprimés). Utile pour alimenter un dossier partagé, "
+            "une clé USB ou un lecteur réseau monté — sans serveur "
+            "FTP.")
         row = QHBoxLayout()
         row.addWidget(self.local_dir, 1)
         b = QPushButton("…")
@@ -62,6 +72,10 @@ class DestinationsTabMixin:
         row = QHBoxLayout()
         self.local_ls = QCheckBox("Paysage")
         self.local_pt = QCheckBox("Portrait")
+        self.local_ls.setToolTip("Inclure les diapos paysage dans la "
+                                 "copie miroir.")
+        self.local_pt.setToolTip("Inclure les diapos portrait dans la "
+                                 "copie miroir.")
         row.addWidget(QLabel("Envoie :"))
         row.addWidget(self.local_ls)
         row.addWidget(self.local_pt)
@@ -73,12 +87,25 @@ class DestinationsTabMixin:
         f = QFormLayout(ftp)
         f.setLabelAlignment(Qt.AlignRight)
         self.ftp_host = QLineEdit(placeholderText="nas.local")
+        self.ftp_host.setToolTip(
+            "Nom ou IP du serveur FTP. Vide = pas d'envoi FTP "
+            "après génération.")
         self.ftp_port = QSpinBox(minimum=1, maximum=65535, value=21)
         self.ftp_port.setFixedWidth(110)
+        self.ftp_port.setToolTip("Port du serveur (21 = standard).")
         self.ftp_path = QLineEdit(placeholderText="/diaporama")
+        self.ftp_path.setToolTip(
+            "Dossier distant de destination — créé s'il n'existe pas.")
         self.ftp_user = QLineEdit()
+        self.ftp_user.setToolTip("Identifiant FTP.")
         self.ftp_pass = _pw("(inchangé si vide)")
+        self.ftp_pass.setToolTip(
+            "Mot de passe FTP — stocké dans le trousseau du système "
+            "quand il existe, sinon en clair dans settings.json.")
         self.ftp_tls = QCheckBox("FTPS")
+        self.ftp_tls.setToolTip(
+            "Chiffre la connexion (FTP sur TLS) — recommandé : "
+            "identifiants et contenu ne circulent pas en clair.")
         f.addRow("Serveur FTP", self.ftp_host)
         f.addRow("Port", self.ftp_port)
         f.addRow("Chemin distant", self.ftp_path)
@@ -88,6 +115,10 @@ class DestinationsTabMixin:
         row = QHBoxLayout()
         self.ftp_ls = QCheckBox("Paysage")
         self.ftp_pt = QCheckBox("Portrait")
+        self.ftp_ls.setToolTip("Inclure les diapos paysage dans "
+                               "l'envoi FTP.")
+        self.ftp_pt.setToolTip("Inclure les diapos portrait dans "
+                               "l'envoi FTP.")
         row.addWidget(QLabel("Envoie :"))
         row.addWidget(self.ftp_ls)
         row.addWidget(self.ftp_pt)
@@ -96,6 +127,9 @@ class DestinationsTabMixin:
         row = QHBoxLayout()
         t = QPushButton("Tester la connexion")
         t.setProperty("ghost", True)
+        t.setToolTip(
+            "Vérifie serveur, identifiants et chemin — peut créer "
+            "les dossiers FTP manquants, comme le ferait la synchro.")
         t.clicked.connect(lambda: self._test("ftp"))
         row.addWidget(t)
         self.ftp_test = QLabel("")
@@ -108,10 +142,24 @@ class DestinationsTabMixin:
         f = QFormLayout(smb)
         f.setLabelAlignment(Qt.AlignRight)
         self.smb_host = QLineEdit(placeholderText="192.168.1.20")
+        self.smb_host.setToolTip(
+            "Nom ou IP du serveur SMB/Windows. Vide = pas d'envoi "
+            "SMB après génération.")
         self.smb_share = QLineEdit(placeholderText="diaporama")
+        self.smb_share.setToolTip(
+            "Nom du partage (ce qui suit \\\\serveur\\ dans le "
+            "chemin réseau).")
         self.smb_path = QLineEdit(placeholderText="(optionnel)")
+        self.smb_path.setToolTip("Sous-dossier dans le partage, "
+                                 "le cas échéant.")
         self.smb_user = QLineEdit(placeholderText="DOMAINE\\user")
+        self.smb_user.setToolTip(
+            "Identifiant Windows — « DOMAINE\\utilisateur » ou "
+            "« machine\\utilisateur » pour un compte local.")
         self.smb_pass = _pw("(inchangé si vide)")
+        self.smb_pass.setToolTip(
+            "Mot de passe du partage — stocké dans le trousseau du "
+            "système quand il existe.")
         f.addRow("Hôte SMB", self.smb_host)
         f.addRow("Partage", self.smb_share)
         f.addRow("Sous-dossier", self.smb_path)
@@ -120,6 +168,10 @@ class DestinationsTabMixin:
         row = QHBoxLayout()
         self.smb_ls = QCheckBox("Paysage")
         self.smb_pt = QCheckBox("Portrait")
+        self.smb_ls.setToolTip("Inclure les diapos paysage dans "
+                               "l'envoi SMB.")
+        self.smb_pt.setToolTip("Inclure les diapos portrait dans "
+                               "l'envoi SMB.")
         row.addWidget(QLabel("Envoie :"))
         row.addWidget(self.smb_ls)
         row.addWidget(self.smb_pt)
@@ -128,6 +180,9 @@ class DestinationsTabMixin:
         row = QHBoxLayout()
         t = QPushButton("Tester la connexion")
         t.setProperty("ghost", True)
+        t.setToolTip(
+            "Vérifie hôte, partage et identifiants en listant le "
+            "dossier distant.")
         t.clicked.connect(lambda: self._test("smb"))
         row.addWidget(t)
         self.smb_test = QLabel("")

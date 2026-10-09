@@ -195,6 +195,185 @@ class ParseTest(unittest.TestCase):
         self.assertIsNone(series_logo(text, "Autre série"))
 
 
+class SeriesFromSoupTest(unittest.TestCase):
+    """Attribution de série : seuls les signaux propres à la page
+    comptent — les cartes/h2 des sections voisines (« Les autres … »)
+    sont exclus."""
+
+    def _soup(self, frag):
+        from bs4 import BeautifulSoup
+        return BeautifulSoup(
+            f"<html><body><main>{frag}</main></body></html>",
+            "html.parser")
+
+    TABLE = {"fete-de-la-science": "Fête de la science"}
+
+    def test_neighbor_series_link_ignored(self):
+        """Lien vers une série voisine depuis une carte v-event__link
+        (sans c-button ni « En savoir plus ») → non capté."""
+        from nextevents.scrape import series_from_soup
+        soup = self._soup(
+            '<div class="v-events__content">'
+            '<a class="v-event__link" href="/au-programme/fete-de-la-science">'
+            'Dans la même série</a></div>')
+        self.assertIsNone(series_from_soup(soup, self.TABLE))
+
+    def test_en_savoir_plus_button(self):
+        from nextevents.scrape import series_from_soup
+        soup = self._soup(
+            '<a class="c-button" href="/au-programme/fete-de-la-science">'
+            'En savoir plus</a>')
+        self.assertEqual(series_from_soup(soup, self.TABLE),
+                         "Fête de la science")
+
+    def test_page_own_slug(self):
+        """La page vit elle-même sur la page série (expo) : le slug de
+        l'URL suffit."""
+        from nextevents.scrape import series_from_soup
+        soup = self._soup("<h1>Jardins d'hiver 2027</h1>")
+        self.assertEqual(
+            series_from_soup(
+                soup, {"jardins-d-hiver": "Jardins d'hiver"},
+                url="https://www.leschampslibres.fr"
+                    "/au-programme/jardins-d-hiver"),
+            "Jardins d'hiver")
+
+    def test_richtext_h2(self):
+        from nextevents.scrape import series_from_soup
+        soup = self._soup(
+            '<div class="s-richtext"><h2>Fête de la science</h2></div>')
+        self.assertEqual(series_from_soup(soup, self.TABLE),
+                         "Fête de la science")
+
+    def test_neighbor_h2_excluded(self):
+        """h2 hors .s-richtext (section « Les autres … ») → ignoré."""
+        from nextevents.scrape import series_from_soup
+        soup = self._soup(
+            '<div class="v-events__content">'
+            '<h2>Fête de la science</h2></div>')
+        self.assertIsNone(series_from_soup(soup, self.TABLE))
+
+
+class FileUriTest(unittest.TestCase):
+    """_file_uri borne les images embarquées aux racines connues —
+    pas de fichier arbitraire via « | /chemin » dans series_map."""
+
+    def test_outside_roots_rejected(self):
+        import tempfile
+        from nextevents import today
+        # la suite pose OUT_DIR sous /tmp — on borne les racines à un
+        # sous-dossier pour que le temp file soit bien « dehors »
+        orig_ro, orig_out = today.resolve_out_dir, today.OUT_DIR
+        today.resolve_out_dir = lambda s=None: _TMP / "o" / "x"
+        today.OUT_DIR = _TMP / "o"
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".png") as f:
+                self.assertIsNone(today._file_uri(f.name))
+            self.assertIsNone(today._file_uri("/etc/passwd"))
+        finally:
+            today.resolve_out_dir, today.OUT_DIR = orig_ro, orig_out
+
+    def test_asset_allowed(self):
+        from nextevents.today import _file_uri
+        from nextevents.paths import ASSET_DIR
+        uri = _file_uri(str(ASSET_DIR / "check.svg"))
+        self.assertTrue(
+            uri.startswith("data:image/svg+xml;base64,"), uri)
+
+
+class PreflightTest(unittest.TestCase):
+
+    def test_defaults_pass(self):
+        """Les réglages d'usine ne doivent produire ni blocage ni
+        avertissement (sauf la sonde navigateur, qui dépend des
+        binaires playwright présents sur la machine)."""
+        from nextevents import preflight
+        issues = [i for i in preflight.validate_settings(
+            dict(st.DEFAULTS)) if "rendu" not in i.msg]
+        self.assertEqual(issues, [])
+
+    def test_no_format_blocks(self):
+        """Paysage et portrait décochés = génération vide : blocker."""
+        from nextevents import preflight
+        issues = preflight.validate_settings(
+            dict(st.DEFAULTS, gen_landscape=0, gen_portrait=0))
+        self.assertTrue(any(i.level == "blocker" for i in issues))
+
+    def test_incomplete_destinations_warn(self):
+        """Un hôte sans identifiants/partage : warn, pas blocker —
+        les diapos locales sont quand même produites."""
+        from nextevents import preflight
+        issues = preflight.validate_settings(
+            dict(st.DEFAULTS, ftp_host="nas.local", ftp_user="",
+                 ftp_pass="", smb_host="192.168.1.2", smb_share="",
+                 local_dir="/n/existe/pas"))
+        warns = [i for i in issues if i.level == "warn"]
+        self.assertEqual(len(warns), 3)
+        self.assertFalse(any(i.level == "blocker" for i in issues))
+
+    def test_bad_sched_times_warn(self):
+        """Un token d'heure fixe mal formé serait ignoré par
+        _times_due en silence — le pré-flight le signale."""
+        from nextevents import preflight
+        issues = preflight.validate_settings(
+            dict(st.DEFAULTS, sched_times="6h00, 18:30"))
+        self.assertTrue(any("6h00" in i.msg for i in issues))
+
+
+class WizardTest(unittest.TestCase):
+
+    def test_presets_and_apply(self):
+        """L'assistant pré-coche d'après les usages, saute la page
+        Écran quand la diffusion n'est pas cochée, et écrit les mêmes
+        clés que les onglets à l'acceptation."""
+        try:
+            os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+            from PySide6.QtWidgets import QApplication
+        except ImportError:
+            self.skipTest("PySide6 indisponible")
+        QApplication.instance() or QApplication([])
+        from ui.wizard import FINAL, OUTPUT, SetupWizard
+        w = SetupWizard()
+        w.show()
+        # usage impression seul : la page Écran (id 1) est sautée,
+        # portrait coché en A4
+        w.use_print.setChecked(True)
+        w.next()
+        self.assertEqual(w.currentId(), OUTPUT)
+        self.assertTrue(w.gen_pt.isChecked())
+        self.assertEqual(w.portrait_fmt.currentData(), "a4")
+        self.assertFalse(w.gen_ls.isChecked())
+        w.next()  # → Destinations
+        w.next()  # → Résumé
+        self.assertEqual(w.currentId(), FINAL)
+        w.accept()
+        s = st.load_settings()
+        self.assertEqual(s["gen_portrait"], 1)
+        self.assertEqual(s["portrait_format"], "a4")
+        self.assertEqual(s["gen_landscape"], 0)
+        self.assertTrue(w.generate_now)   # case cochée par défaut
+        w.deleteLater()
+
+
+class HelpDialogTest(unittest.TestCase):
+
+    def test_topics_and_dialog(self):
+        """Une rubrique par onglet + raccourcis ; le dialog s'ouvre
+        sur la rubrique demandée (contextuel à l'onglet courant)."""
+        try:
+            os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+            from PySide6.QtWidgets import QApplication
+        except ImportError:
+            self.skipTest("PySide6 indisponible")
+        QApplication.instance() or QApplication([])
+        from ui.help import TOPICS, HelpDialog
+        self.assertEqual(len(TOPICS), 5)   # 4 onglets + raccourcis
+        d = HelpDialog(None, topic=2)      # Diapo du jour
+        self.assertEqual(d.picker.currentIndex(), 2)
+        self.assertIn("auditorium", d.body.toPlainText())
+        d.deleteLater()
+
+
 class SpecsCheckboxesTest(unittest.TestCase):
 
     def test_empty_specs_show_checks_all(self):

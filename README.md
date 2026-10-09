@@ -199,6 +199,14 @@ trousseau au premier enregistrement des réglages.
 > [Antivirus](#antivirus--réputation-symantec-smartscreen)). Cliquer
 > « Informations complémentaires » → « Exécuter quand même ».
 
+Au tout premier lancement (aucun réglage enregistré), un **assistant
+de configuration** propose de déclarer l'usage du poste — diffusion
+sur un écran local, impression A4, copie vers un dossier partagé,
+envoi FTP/SMB — et pré-remplit les réglages correspondants (formats
+générés, écran, démarrage auto, destinations). « Passer » peut être
+reproposé au prochain lancement ou appliquer les défauts ; tout reste
+modifiable ensuite dans les onglets.
+
 Lancer `nextevents.exe` / l'AppImage → fenêtre principale :
 
 - **Général** — réglages (intervalle, nb d'événements, résolution,
@@ -226,6 +234,10 @@ Fermer la fenêtre réduit l'app dans la zone de notification ; double-
 clic sur l'icône la réaffiche. Clic droit : Afficher / Générer
 maintenant / Diaporama paysage / Diaporama portrait / Dossier de
 destination… / Ouvrir les diapos / Quitter.
+
+Le bouton **Générer** vérifie les réglages avant de partir : un
+blocage (aucun format coché…) l'arrête avec la liste des corrections,
+un avertissement (destination incomplète…) demande confirmation.
 
 Sur un poste d'affichage : cocher **« Lancer l'application à
 l'ouverture de session »** (onglet Général → Application) pour que
