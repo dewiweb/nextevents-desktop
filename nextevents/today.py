@@ -11,7 +11,7 @@ from pathlib import Path
 from string import Template
 
 from .media import ensure_fonts
-from .paths import ASSET_DIR
+from .paths import ASSET_DIR, ROOT
 from .settings import OUT_DIR, resolve_out_dir
 from .scrape import BASE, CARD_COLORS, SERIES
 
@@ -19,26 +19,39 @@ _TEMPLATE = None
 _TEMPLATE_QR = None
 
 
+_IMG_EXTS = {".png", ".svg", ".jpg", ".jpeg", ".webp", ".gif"}
+
+
 def _file_uri(path_str):
     """Fichier image → data URI. Les chemins relatifs sont résolus
     depuis le dossier parent de la sortie configurée, puis depuis le
-    dossier de données de l'app (repli pour les configs antérieures)."""
+    dossier de données de l'app (repli pour les configs antérieures)
+    — et le fichier doit rester dans l'une de ces racines, les assets
+    ou la racine du projet : le chemin vient du réglage series_map,
+    rien ne justifie de lire un fichier arbitraire (| /etc/…)."""
+    bases = (resolve_out_dir().parent, OUT_DIR.parent)
+    roots = tuple(b.resolve() for b in (*bases, ASSET_DIR, ROOT))
     p = Path(path_str).expanduser()
     if not p.is_absolute():
-        for base in (resolve_out_dir().parent, OUT_DIR.parent):
+        for base in bases:
             cand = base / p
             if cand.is_file():
                 p = cand
                 break
         else:
-            p = resolve_out_dir().parent / p
-    if not p.is_file():
+            p = bases[0] / p
+    try:
+        rp = p.resolve()
+    except OSError:
+        return None
+    if (p.suffix.lower() not in _IMG_EXTS or not rp.is_file()
+            or not any(rp.is_relative_to(r) for r in roots)):
         return None
     mime = {".png": "image/png", ".svg": "image/svg+xml",
             ".gif": "image/gif", ".webp": "image/webp",
-            ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}.get(
-                p.suffix.lower(), "image/png")
-    return f"data:{mime};base64,{base64.b64encode(p.read_bytes()).decode()}"
+            ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}[
+                p.suffix.lower()]
+    return f"data:{mime};base64,{base64.b64encode(rp.read_bytes()).decode()}"
 
 
 def _template():
@@ -136,6 +149,13 @@ def today_html(data, fonts):
     # orphelin en fin de ligne et respecte la typographie française
     title_esc = re.sub(r"\s+([?!:;»])", "&nbsp;\\1", html.escape(title))
     n = len(title)
+    # nom de série : le mot le plus long doit tenir dans les ~190px
+    # utiles du rond (250px − padding ; un glyphe majuscule ≈ 0,66× la
+    # taille de fonte en Oldschool Grotesk) — un keyword d'un seul
+    # tenant (« FETEDELASCIENCE ») tient sur une ligne plutôt que de
+    # casser en plein mot
+    longest = max([len(w) for w in series.split()] or [0])
+    gt_size = min(36, int(190 / (0.66 * max(longest, 1))))
     return _template().substitute(
         font_regular=fonts["regular"],
         font_medium=fonts["medium"],
@@ -146,6 +166,7 @@ def today_html(data, fonts):
         faint="#bfbbb8",
         variant=" gt" if series else "",
         badge_html=badge_html,
+        gt_size=gt_size,
         h1_size=80 if n < 42 else 64 if n < 80 else 52,
         title=title_esc,
         speakers_label="Avec" if speakers_html else "",
@@ -238,13 +259,23 @@ def render_today_png(size, out_dir=None):
     out = Path(out_dir) if out_dir else OUT_DIR
     src = out / "today" / "index.html"
     png = out / "today" / "index.png"
-    jobs = [(src, png)]
     qr_src = out / "today" / "qr.html"
+    qr_png = out / "today" / "qr.png"
+    # supprimer les PNG avant le rendu : si le screenshot échoue, un
+    # PNG périmé ne doit pas être poussé avec le HTML frais
+    png.unlink(missing_ok=True)
+    qr_png.unlink(missing_ok=True)
+    jobs = [(src, png)]
     if qr_src.exists():
-        jobs.append((qr_src, out / "today" / "qr.png"))
+        jobs.append((qr_src, qr_png))
     list(render_all(jobs, size=size))
     if not png.exists():
         raise RuntimeError("rendu de la diapo du jour impossible")
+    # manifeste du jeu — les synchros le poussent en dernier comme
+    # marqueur d'intégrité, comme pour le diaporama principal
+    names = [png.name] + (["qr.png"] if qr_png.exists() else [])
+    (out / "today" / "manifest.txt").write_text(
+        "\n".join(names) + "\n", encoding="utf-8")
     return png
 
 
@@ -258,6 +289,9 @@ def push_today(cfg, out_dir=None):
         if d.exists() else []
     if not files:
         return ["today/ absent"]
+    # manifeste en dernier : marqueur d'intégrité du jeu pour les
+    # récepteurs, comme dans les synchros du diaporama
+    files.sort(key=lambda p: p.name == "manifest.txt")
     errors = []
 
     smb_host = (cfg.get("smb_host") or "").strip()

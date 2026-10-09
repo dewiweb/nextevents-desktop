@@ -51,6 +51,10 @@ def _render_set(events, fonts, dest, size, orientation="landscape"):
         ):
             continue
         hp.write_text(content, encoding="utf-8")
+        # le PNG existant ne correspond plus au HTML : le retirer pour
+        # ne pas publier une diapo périmée si le rendu échoue
+        if pp.exists():
+            pp.unlink()
         to_render.append((hp, pp))
 
     for p in dest.glob("*.png"):

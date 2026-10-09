@@ -109,6 +109,72 @@ def series_brand(text, series):
                 return l, g
     return None, None
 
+
+def series_match(ident, candidates):
+    """Premier candidat qui désigne la même série que `ident`, ou None.
+
+    Égalité des formes normalisées d'abord, puis sous-chaîne ≥4
+    caractères (« nosfuturs » ⊂ « nosfuturs2027 ») — le seuil écarte
+    les faux positifs des identifiants très courts (« jdh »)."""
+    h = _norm_series(ident)
+    if not h:
+        return None
+    normed = [(c, _norm_series(c)) for c in candidates]
+    for c, n in normed:
+        if n == h:
+            return c
+    for c, n in normed:
+        if len(n) >= 4 and len(h) >= 4 and (n in h or h in n):
+            return c
+    return None
+
+
+def _series_label_for(ident, table):
+    """Libellé de la série correspondant à `ident` (slug, keyword ou
+    libellé) dans `table` (identifiant → libellé) — clés et libellés
+    sont tous deux candidats (un identifiant brut peut être l'un ou
+    l'autre)."""
+    m = series_match(ident, list(table.keys()) + list(table.values()))
+    # clé → libellé de sa ligne ; libellé → lui-même
+    return table.get(m, m) if m is not None else None
+
+
+def series_from_soup(soup, table, url=None):
+    """Libellé de série détecté sur une page détail.
+
+    Signaux par ordre de fiabilité :
+    1. lien « En savoir plus » (bouton c-button) vers la page série —
+       les liens v-event__link des blocs « Les autres … » pointent des
+       séries/événements voisins et ne doivent pas être captés ;
+    2. le slug de la page elle-même — une expo comme « Jardins
+       d'hiver » vit directement sur la page série ;
+    3. <h2> du contenu propre de la page (.s-richtext) portant le nom
+       d'une série suivie — les h2 des sections voisines (« Dans le
+       Mag », « Les autres … ») vivent dans v-events__content."""
+    scope = soup.select_one("main") or soup
+    for a in scope.select('a[href*="/au-programme/"]'):
+        h = a.get("href") or ""
+        if "/categorie/" in h or re.search(r"/\d+", h):
+            continue
+        txt = " ".join(a.get_text().split()).lower()
+        if "c-button" not in (a.get("class") or []) \
+                and "en savoir plus" not in txt:
+            continue
+        lbl = _series_label_for(
+            h.rstrip("/").rsplit("/", 1)[-1], table)
+        if lbl:
+            return lbl
+    if url:
+        slug = re.sub(r"/\d+/?$", "", url.rstrip("/")).rsplit("/", 1)[-1]
+        lbl = _series_label_for(slug, table)
+        if lbl:
+            return lbl
+    for h2 in scope.select(".s-richtext h2"):
+        lbl = _series_label_for(" ".join(h2.get_text().split()), table)
+        if lbl:
+            return lbl
+    return None
+
 SPEC_ICONS = {"Date": "calendar", "Séances": "calendar", "Durée": "timer",
               "Lieu": "pin", "Tarif": "ticket", "Public": "group",
               "Accessibilité": "accessibility"}
@@ -329,15 +395,14 @@ def parse_detail(ev, series_map=None):
             if label and label not in ev["specs"]:
                 ev["specs"][label] = " ".join(text.get_text().split())
 
-    # appartenance à une série : bloc richtext « En savoir plus » vers
-    # /au-programme/<slug> ou <h2> au nom de la série (présent sur une
-    # partie seulement des pages — mark_series complète via la page série)
-    for slug, label in (series_map or SERIES).items():
-        if soup.find("a", href=re.compile(rf"/{slug}\b")) or soup.find(
-                lambda t: t.name == "h2"
-                and label.lower() in t.get_text().lower()):
-            ev["series"] = label
-            break
+    # appartenance à une série : signaux fiables seulement — les liens
+    # et h2 des sections voisines (« Les autres … ») sont exclus pour
+    # ne pas capter une série voisine (présent sur une partie seulement
+    # des pages — mark_series complète via la page série)
+    series = series_from_soup(soup, series_map or SERIES,
+                              url=ev.get("url"))
+    if series:
+        ev["series"] = series
 
     # bloc « Destiné à … / Accessibilité » : le site reflète les champs
     # OpenAgenda (publics / accessibility) — extraction directe, sans
