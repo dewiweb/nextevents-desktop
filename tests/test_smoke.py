@@ -303,10 +303,13 @@ class PreflightTest(unittest.TestCase):
         """Un hôte sans identifiants/partage : warn, pas blocker —
         les diapos locales sont quand même produites."""
         from nextevents import preflight
-        issues = preflight.validate_settings(
+        issues = [i for i in preflight.validate_settings(
             dict(st.DEFAULTS, ftp_host="nas.local", ftp_user="",
                  ftp_pass="", smb_host="192.168.1.2", smb_share="",
                  local_dir="/n/existe/pas"))
+            # la sonde navigateur dépend des binaires présents sur la
+            # machine (absents en CI) — hors sujet de ce test
+            if "navigateur de rendu" not in i.msg]
         warns = [i for i in issues if i.level == "warn"]
         self.assertEqual(len(warns), 3)
         self.assertFalse(any(i.level == "blocker" for i in issues))
