@@ -1,0 +1,34 @@
+<p>Chaque génération écrit les diapos dans le <b>dossier de
+sortie</b>, puis les pousse vers toutes les destinations remplies —
+une destination en échec ne bloque pas les autres (l'erreur part en
+warning dans le journal).</p>
+
+<p><img src="img/destinations-dossiers.png" width="820"></p>
+
+<p><b>Dossier de sortie</b> — vide = dossier intégré de l'app
+(<i>data/diaporama</i>). Utile pour écrire directement sur un
+lecteur réseau monté.</p>
+
+<p><b>Copie miroir</b> — clone la sortie vers un autre dossier
+(partage, clé USB…) sans serveur.</p>
+
+<p><b>FTP</b> — envoi vers un serveur FTP ; cochez <i>TLS</i> pour
+chiffrer. <b>SMB</b> — partage Windows (hôte + partage + chemin).
+Dans les deux cas : « Tester la connexion » avant la première
+génération.</p>
+
+<p><img src="img/destinations-ftp.png" width="820"></p>
+<p><img src="img/destinations-smb.png" width="820"></p>
+
+<p><b>Paysage / Portrait par destination</b> — chaque destination
+choisit les layouts qu'elle reçoit : ne poussez l'A4 que là où il
+sert (impression), pas sur les écrans.</p>
+
+<p><b>Secrets</b> — mots de passe et clé API : stockés de préférence
+dans le trousseau système, ou lus depuis les variables
+d'environnement <i>NEXTEVENTS_FTP_PASS</i> (etc.) ; le champ vide
+garde la valeur enregistrée.</p>
+
+<p><b>Attention, miroir</b> : les synchros suppriment à distance les
+fichiers générés absents en local (manifeste d'intégrité poussé en
+dernier) — utilisez des dossiers de destination dédiés.</p>
