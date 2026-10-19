@@ -37,7 +37,7 @@
 :root{--k:1}
 html,body{width:1920px;height:1080px;overflow:hidden}
 body{font-family:'Oldschool Grotesk',Arial,sans-serif;color:$light;
- background:#000;display:flex;flex-direction:column}
+ background:transparent;display:flex;flex-direction:column}
 .card{position:relative;flex:1;background:$bg;border-radius:72px;
  overflow:hidden;display:flex;flex-direction:column;align-items:center;
  text-align:center;padding:calc(64px*var(--k)) 90px
@@ -97,7 +97,7 @@ h1{font-size:80px;font-weight:500;line-height:1.08;letter-spacing:-.01em;
 /* le rond de série (250px) est plus haut que la pastille .tag (~65px) :
    marge négative pour que le titre reste à la même hauteur que sur les
    autres diapos — le cercle déborde visuellement dans la zone vide */
-.gt-name{font-size:calc(36px*var(--k));font-weight:500;line-height:1.14;
+.gt-name{font-size:calc(${gt_size}px*var(--k));font-weight:500;line-height:1.14;
  text-transform:uppercase;letter-spacing:.02em;
  padding:0 calc(26px*var(--k));max-width:100%;text-align:center;
  overflow-wrap:anywhere}

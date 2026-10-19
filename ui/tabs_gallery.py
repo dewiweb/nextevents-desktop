@@ -48,10 +48,16 @@ class GalleryTabMixin:
         row.addWidget(rf)
         od = QPushButton("Ouvrir le dossier de sortie")
         od.setProperty("ghost", True)
+        od.setToolTip("Ouvre le dossier où les diapos sont écrites "
+                      "dans le gestionnaire de fichiers.")
         od.clicked.connect(lambda: self._open_dir(resolve_out_dir()))
         row.addWidget(od)
         dl = QPushButton("Exporter en .zip")
         dl.setProperty("ghost", True)
+        dl.setToolTip(
+            "Archive toutes les diapos (paysage + portrait + diapo "
+            "du jour) dans un fichier .zip — pratique pour les "
+            "transmettre à des partenaires.")
         dl.clicked.connect(self._download_zip)
         row.addWidget(dl)
         rm = QPushButton("Supprimer")
@@ -59,11 +65,18 @@ class GalleryTabMixin:
         rm.setToolTip("Supprimer la sélection (Suppr)")
         rm.clicked.connect(self._delete_selected)
         row.addWidget(rm)
+        pr = QPushButton("Imprimer…")
+        pr.setProperty("ghost", True)
+        pr.setToolTip("Imprimer la sélection — ou toute la galerie "
+                      "active si rien n'est sélectionné")
+        pr.clicked.connect(self._print_gallery)
+        row.addWidget(pr)
         row.addStretch(1)
         lay.addLayout(row)
 
         self.galleries = {}
         inner = QTabWidget()
+        self._gal_inner = inner
         inner.setDocumentMode(True)
         # suffixe réglages, sous-dossier, titre d'onglet, taille vignette
         for sfx, sub, label, tw, th in (
@@ -79,16 +92,25 @@ class GalleryTabMixin:
             h = QHBoxLayout()
             delay = QSpinBox(minimum=2, maximum=3600, suffix=" s")
             delay.setFixedWidth(110)
+            delay.setToolTip("Temps d'affichage de chaque diapo.")
             trans = QComboBox()
             trans.setFixedWidth(150)
+            trans.setToolTip("Effet de transition entre les diapos.")
             trans.addItem("Aucune", "none")
             trans.addItem("Fondu", "fade")
             trans.addItem("Glissement", "slide")
             tdur = QSpinBox(minimum=0, maximum=10000, singleStep=100,
                             suffix=" ms")
             tdur.setFixedWidth(110)
+            tdur.setToolTip(
+                "Durée de la transition (sans effet si « Aucune »).")
             screen = QComboBox()
             screen.setFixedWidth(210)
+            screen.setToolTip(
+                "Écran sur lequel le diaporama s'ouvre — « Écran "
+                "principal » = celui de l'app. Le choix est relu en "
+                "continu : un écran rebranché est pris en compte "
+                "sans relancer le player.")
             screen.addItem("Écran principal", -1)
             # écran de diffusion sur les postes multi-sorties — l'index
             # stocké dans ss_screen* est celui de QApplication.screens()
@@ -117,6 +139,8 @@ class GalleryTabMixin:
             h2.addStretch(1)
             b = QPushButton("Ouvrir le slideshow")
             b.setProperty("ghost", True)
+            b.setToolTip("Diaporama plein écran sur l'écran choisi — "
+                         "Échap pour quitter.")
             b.clicked.connect(lambda _=False, p=bool(sfx):
                               self._open_slideshow(p))
             h2.addWidget(b)
@@ -141,6 +165,11 @@ class GalleryTabMixin:
             # plancher bas : la liste peut rétrécir, le scroll de page
             # prend le relais plutôt que de couper le groupe Lecture
             gal.setMinimumHeight(150)
+            gal.setToolTip(
+                "Double-clic : aperçu grand format.\n"
+                "Clic droit : régénérer, lancer le diaporama depuis "
+                "cette diapo, supprimer.\n"
+                "Suppr : supprimer la sélection.")
             gal.itemDoubleClicked.connect(self._preview_slide)
             QShortcut(QKeySequence.Delete, gal,
                       context=Qt.WidgetWithChildrenShortcut,
@@ -168,7 +197,10 @@ class GalleryTabMixin:
                 w.activateWindow()
                 return
         sfx = "_p" if portrait else ""
-        scr = int(load_settings().get(f"ss_screen{sfx}") or -1)
+        # pas de « or -1 » : l'index 0 (« Écran 1 ») est falsy et
+        # retombait sur l'écran par défaut
+        v = load_settings().get(f"ss_screen{sfx}", -1)
+        scr = -1 if v in (None, "") else int(v)
         win = SlideshowWindow(portrait=portrait, screen_idx=scr,
                               start_at=start_at)
         win.setAttribute(Qt.WA_DeleteOnClose)
@@ -214,6 +246,34 @@ class GalleryTabMixin:
             return
         from .preview import preview_image
         preview_image(self, resolve_out_dir() / rel, it.text())
+
+    def _print_items(self, items):
+        """Imprime les diapos sélectionnées — une par page via le
+        dialogue natif (qui permet aussi « imprimer en PDF »)."""
+        from .printing import print_images
+        d = resolve_out_dir()
+        paths = sorted(d / it.data(Qt.UserRole) for it in items)
+        print_images(paths, self)
+
+    def _print_gallery(self):
+        """Bouton « Imprimer… » : la sélection s'il y en a une, sinon
+        toute la galerie de l'onglet actif (avec confirmation — ça
+        peut faire plusieurs dizaines de pages)."""
+        sel = [it for g in self.galleries.values()
+               for it in g.selectedItems() if it.data(Qt.UserRole)]
+        if sel:
+            self._print_items(sel)
+            return
+        gal = self._gal_inner.currentWidget().findChild(QListWidget) \
+            if self._gal_inner else None
+        items = [gal.item(i) for i in range(gal.count())
+                 if gal.item(i).data(Qt.UserRole)] if gal else []
+        if not items:
+            self.statusBar().showMessage("Rien à imprimer", 4000)
+            return
+        from .printing import ask_print_all
+        if ask_print_all(len(items), self):
+            self._print_items(items)
 
     def _refresh_gallery(self):
         """Recharge la liste puis décode les vignettes dans un thread —
@@ -407,7 +467,10 @@ class GalleryTabMixin:
                 (dest / "html").mkdir(exist_ok=True)
                 hp = dest / "html" / f"{stem}.html"
                 hp.write_text(
-                    slide_html(ev, 0, fonts, orientation),
+                    slide_html(
+                        ev, 0, fonts, orientation,
+                        cfg.get("desc_mode") or "auto",
+                        int(cfg.get("desc_max", 400) or 0)),
                     encoding="utf-8")
                 # render_all est un générateur : il faut l'itérer
                 # pour que le rendu s'exécute
@@ -467,7 +530,12 @@ class GalleryTabMixin:
             if url:
                 m.addAction("Ouvrir la fiche de l'événement").triggered\
                     .connect(lambda: QDesktopServices.openUrl(QUrl(url)))
-        if gal.selectedItems():
+        sel = [it for g in self.galleries.values()
+               for it in g.selectedItems() if it.data(Qt.UserRole)]
+        if sel:
+            m.addAction(
+                f"Imprimer {'la sélection' if len(sel) > 1 else 'cette diapo'}…"
+            ).triggered.connect(lambda: self._print_items(sel))
             m.addAction("Supprimer la sélection…").triggered.connect(
                 self._delete_selected)
         if m.actions():

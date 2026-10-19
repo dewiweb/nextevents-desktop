@@ -78,8 +78,11 @@ rm -f "$APPDIR"/opt/nextevents/_internal/PySide6/Qt/plugins/imageformats/libqtif
 #     libqxcb — l'app échouerait sur X11 sans elle
 for lib in libEGL.so.1 libGLdispatch.so.0 libGLX.so.0 libOpenGL.so.0 \
            libxcb-shape.so.0; do
-    src=$(ldconfig -p | awk -v l="$lib" \
-        '$1==l && /x86-64/{print $NF; exit}')
+    # || true : awk sort au premier match, ldconfig peut prendre un
+    # SIGPIPE — avec pipefail la substitution renverrait 141 et set -e
+    # tuerait le script
+    src=$( (ldconfig -p | awk -v l="$lib" \
+        '$1==l && /x86-64/{print $NF; exit}') || true)
     if [ -n "$src" ]; then
         cp -L "$src" "$APPDIR/usr/lib/$lib"
     else

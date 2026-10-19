@@ -89,6 +89,8 @@ jobs:
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
           files: dist/${{ env.ZIP_NAME }}
           generate_release_notes: true
+          # v0.5.0 = stable ; v0.5.0-beta.3 (tout tag avec tiret) = prérelease
+          prerelease: ${{ contains(github.ref_name, '-') }}
 
   build-linux:
     # ubuntu-22.04 = glibc la plus ancienne supportée : l'AppImage
@@ -162,3 +164,4 @@ jobs:
         with:
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
           files: dist/${{ env.APPIMAGE_NAME }}
+          prerelease: ${{ contains(github.ref_name, '-') }}

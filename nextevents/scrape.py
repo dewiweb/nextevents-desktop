@@ -109,10 +109,81 @@ def series_brand(text, series):
                 return l, g
     return None, None
 
+
+def series_match(ident, candidates):
+    """Premier candidat qui désigne la même série que `ident`, ou None.
+
+    Égalité des formes normalisées d'abord, puis sous-chaîne ≥4
+    caractères (« nosfuturs » ⊂ « nosfuturs2027 ») — le seuil écarte
+    les faux positifs des identifiants très courts (« jdh »)."""
+    h = _norm_series(ident)
+    if not h:
+        return None
+    normed = [(c, _norm_series(c)) for c in candidates]
+    for c, n in normed:
+        if n == h:
+            return c
+    for c, n in normed:
+        if len(n) >= 4 and len(h) >= 4 and (n in h or h in n):
+            return c
+    return None
+
+
+def _series_label_for(ident, table):
+    """Libellé de la série correspondant à `ident` (slug, keyword ou
+    libellé) dans `table` (identifiant → libellé) — clés et libellés
+    sont tous deux candidats (un identifiant brut peut être l'un ou
+    l'autre)."""
+    m = series_match(ident, list(table.keys()) + list(table.values()))
+    # clé → libellé de sa ligne ; libellé → lui-même
+    return table.get(m, m) if m is not None else None
+
+
+def series_from_soup(soup, table, url=None):
+    """Libellé de série détecté sur une page détail.
+
+    Signaux par ordre de fiabilité :
+    1. lien « En savoir plus » (bouton c-button) vers la page série —
+       les liens v-event__link des blocs « Les autres … » pointent des
+       séries/événements voisins et ne doivent pas être captés ;
+    2. le slug de la page elle-même — une expo comme « Jardins
+       d'hiver » vit directement sur la page série ;
+    3. <h2> du contenu propre de la page (.s-richtext) portant le nom
+       d'une série suivie — les h2 des sections voisines (« Dans le
+       Mag », « Les autres … ») vivent dans v-events__content."""
+    scope = soup.select_one("main") or soup
+    for a in scope.select('a[href*="/au-programme/"]'):
+        h = a.get("href") or ""
+        if "/categorie/" in h or re.search(r"/\d+", h):
+            continue
+        txt = " ".join(a.get_text().split()).lower()
+        if "c-button" not in (a.get("class") or []) \
+                and "en savoir plus" not in txt:
+            continue
+        lbl = _series_label_for(
+            h.rstrip("/").rsplit("/", 1)[-1], table)
+        if lbl:
+            return lbl
+    if url:
+        slug = re.sub(r"/\d+/?$", "", url.rstrip("/")).rsplit("/", 1)[-1]
+        lbl = _series_label_for(slug, table)
+        if lbl:
+            return lbl
+    for h2 in scope.select(".s-richtext h2"):
+        lbl = _series_label_for(" ".join(h2.get_text().split()), table)
+        if lbl:
+            return lbl
+    return None
+
 SPEC_ICONS = {"Date": "calendar", "Séances": "calendar", "Durée": "timer",
               "Lieu": "pin", "Tarif": "ticket", "Public": "group",
               "Accessibilité": "accessibility"}
 SPRITE_LABELS = {v: k for k, v in SPEC_ICONS.items()}
+# collision : « Date » et « Séances » partagent le sprite calendar —
+# l'inversion garde la dernière clé (« Séances »), donc le spec date
+# de la bannière détail s'ajoutait en doublon de « Date » sur la carte.
+# Sur la bannière ce sprite désigne toujours la date : « Date » gagne.
+SPRITE_LABELS["calendar"] = "Date"
 SPEC_ORDER = ["Date", "Séances", "Durée", "Lieu", "Tarif", "Public",
               "Accessibilité"]
 
@@ -175,12 +246,16 @@ def event_dates(ev):
     return None, None
 
 
-def group_sessions(events):
+def group_sessions(events, next_label=None):
     """Fusionne les séances multiples d'un même événement : le site
     éclate chaque date en carte séparée (animations, ateliers, visites
     et rdv4c récurrents → des dizaines de cartes par événement). Une
     diapo = un événement : on garde la prochaine séance (la spec
-    « Séances : N à venir » n'apportait rien — retirée)."""
+    « Séances : N à venir » n'apportait rien — retirée).
+    `next_label` préfixe la date des récurrents (vide = date seule)."""
+    if next_label is None:
+        from .settings import DEFAULT_NEXT_LABEL
+        next_label = DEFAULT_NEXT_LABEL
     groups = {}
     for ev in events:
         key = re.sub(r"[^a-z0-9à-ÿ]+", "", (ev.get("title") or "")
@@ -196,8 +271,9 @@ def group_sessions(events):
         if len(g) > 1:
             ev["n_sessions"] = len(g)
             d = ev["specs"].get("Date", "")
-            if d and not d.startswith("Prochaine séance"):
-                ev["specs"]["Date"] = f"Prochaine séance : {d}"
+            if d and next_label \
+                    and not d.startswith(next_label.strip()):
+                ev["specs"]["Date"] = f"{next_label}{d}"
         out.append(ev)
     out.sort(key=lambda e: (
         0 if e.get("pinned") else 1, e.get("_dt") or (9999, 12, 31, 23, 59)))
@@ -319,15 +395,14 @@ def parse_detail(ev, series_map=None):
             if label and label not in ev["specs"]:
                 ev["specs"][label] = " ".join(text.get_text().split())
 
-    # appartenance à une série : bloc richtext « En savoir plus » vers
-    # /au-programme/<slug> ou <h2> au nom de la série (présent sur une
-    # partie seulement des pages — mark_series complète via la page série)
-    for slug, label in (series_map or SERIES).items():
-        if soup.find("a", href=re.compile(rf"/{slug}\b")) or soup.find(
-                lambda t: t.name == "h2"
-                and label.lower() in t.get_text().lower()):
-            ev["series"] = label
-            break
+    # appartenance à une série : signaux fiables seulement — les liens
+    # et h2 des sections voisines (« Les autres … ») sont exclus pour
+    # ne pas capter une série voisine (présent sur une partie seulement
+    # des pages — mark_series complète via la page série)
+    series = series_from_soup(soup, series_map or SERIES,
+                              url=ev.get("url"))
+    if series:
+        ev["series"] = series
 
     # bloc « Destiné à … / Accessibilité » : le site reflète les champs
     # OpenAgenda (publics / accessibility) — extraction directe, sans
@@ -361,9 +436,13 @@ _ACCESS_PATTERNS = [
     (re.compile(r"audiodescri\w*|audio-description", re.I),
      "Audiodescription"),
     (re.compile(r"surtitr", re.I), "Surtitrage"),
-    (re.compile(r"boucle magn[ée]tique|collier magn[ée]tique"
-               r"|casque d'amplification", re.I),
-     "Dispositifs d'écoute amplifiée"),
+    # chaque dispositif détecté est nommé — pas de terme générique
+    # quand la donnée source précise lequel est disponible
+    (re.compile(r"boucle magn[ée]tique|boucle [àa] induction", re.I),
+     "Boucle magnétique"),
+    (re.compile(r"collier magn[ée]tique", re.I), "Collier magnétique"),
+    (re.compile(r"casque d'amplification|casque amplifi", re.I),
+     "Casque amplifié"),
 ]
 
 

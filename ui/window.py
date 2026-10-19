@@ -16,7 +16,7 @@ import threading
 from datetime import datetime
 
 from PySide6.QtCore import (
-    QDate, QTimer, Signal,
+    QDate, QSize, QTimer, Signal,
 )
 from PySide6.QtGui import (
     QIcon, QKeySequence, QShortcut,
@@ -26,11 +26,12 @@ from PySide6.QtWidgets import (
     QPushButton, QTabWidget, QVBoxLayout, QWidget,
 )
 
-from nextevents.runner import run_generation, slides
+from nextevents.runner import run_generation, slides, slides_portrait
 from nextevents.settings import (
-    load_settings, save_settings, state,
+    load_settings, save_settings, state, parse_kv,
+    DEFAULT_NEXT_LABEL,
 )
-from .style import STYLE, WheelGuard  # noqa: F401 — ré-export pour ui.app
+from .style import HELP_IMG, STYLE, WheelGuard  # noqa: F401 — ré-export pour ui.app
 from .tabs_general import GeneralTabMixin
 from .tabs_destinations import DestinationsTabMixin
 from .tabs_gallery import GalleryTabMixin
@@ -126,6 +127,7 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
         tabs.addTab(self.today_tab, "Diapo du jour")
         tabs.addTab(self._tab_ss, "Galerie")
         tabs.setCurrentIndex(0)
+        self._tabs = tabs
         root.addWidget(tabs, 1)
         self.setCentralWidget(central)
 
@@ -134,10 +136,11 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
         self.statusBar().addPermanentWidget(self.sched_lbl)
         self.statusBar().showMessage(
             "Ctrl+G générer · Ctrl+S enregistrer · "
-            "F11 diaporama · Échap quitter le diaporama")
+            "F11 diaporama · F1 aide · Échap quitter le diaporama")
 
         QShortcut(QKeySequence("Ctrl+G"), self, activated=self._run)
         QShortcut(QKeySequence("Ctrl+S"), self, activated=self._save)
+        QShortcut(QKeySequence("F1"), self, activated=self._show_help)
         QShortcut(QKeySequence("F11"), self,
                   activated=lambda: self._open_slideshow(False))
         QShortcut(QKeySequence("F5"), self,
@@ -196,6 +199,14 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
             "Enregistrer les réglages (Ctrl+S)")
         self.save_btn.clicked.connect(self._save)
         lay.addWidget(self.save_btn)
+        help_btn = QPushButton()
+        help_btn.setProperty("ghost", True)
+        help_btn.setIcon(QIcon(HELP_IMG))
+        help_btn.setIconSize(QSize(16, 16))
+        help_btn.setFixedWidth(38)
+        help_btn.setToolTip("Aide — rubrique de l'onglet courant (F1)")
+        help_btn.clicked.connect(self._show_help)
+        lay.addWidget(help_btn)
         return h
 
     # ———————————————————— réglages ————————————————————
@@ -204,6 +215,12 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
         """Lit les widgets → dict de réglages (mêmes clés que la webui)."""
         s = load_settings()
         s.pop("interval_hours", None)  # remplacé par interval_min
+        # specs_show : toutes cochées = "" (toutes) ; aucune = "Date"
+        # seule — la Date reste requise pour le nommage des fichiers
+        shown = [k for k, (cb, _o) in self._spec_rows.items()
+                 if cb.isChecked()]
+        specs_show = ("" if len(shown) == len(self._spec_rows)
+                      else ",".join(shown) if shown else "Date")
         s.update(
             interval_min=self.interval.value(),
             sched_times=self.sched_times.text().strip(),
@@ -211,6 +228,10 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
             limit_mode=self.limit_mode.currentData(),
             limit_days=self.limit_days.value(),
             limit_date=self.limit_date.date().toString("yyyy-MM-dd"),
+            # borne de début partagée par « À partir du » et
+            # « Du … au … » — widgets synchronisés, on lit l'un
+            limit_from=self.limit_from.date().toString("yyyy-MM-dd"),
+            limit_to=self.range_to.date().toString("yyyy-MM-dd"),
             resolution=self.res.currentData(),
             gen_landscape=int(self.gen_ls.isChecked()),
             gen_portrait=int(self.gen_pt.isChecked()),
@@ -218,6 +239,16 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
             gen_categories=",".join(
                 slug for slug, cb in self._cat_boxes.items()
                 if cb.isChecked()),
+            specs_show=specs_show,
+            spec_overrides="\n".join(
+                f"{k} = {ov.text().strip()}"
+                for k, (cb, ov) in self._spec_rows.items()
+                if ov.text().strip()),
+            spec_drops=self.spec_drops.text().strip(),
+            next_label=self.next_label.text(),
+            date_format=self.date_fmt.currentData(),
+            desc_mode=self.desc_mode.currentData(),
+            desc_max=self.desc_max.value(),
             ftp_host=self.ftp_host.text().strip(),
             ftp_port=self.ftp_port.value(),
             ftp_path=self.ftp_path.text().strip(),
@@ -337,6 +368,25 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
         from nextevents.runner import _interval_min
         self.interval.setValue(_interval_min(s))
         self.sched_times.setText(s.get("sched_times") or "")
+        # specs : specs_show vide = toutes ; overrides « Clé = v »/ligne
+        # specs_show vide = toutes — "".split(",") donne [""] : il
+        # faut filtrer les chaînes vides sinon toutes les coches
+        # apparaissent décochées et le prochain save n'écrirait
+        # que "Date"
+        shown = set(filter(None, (s.get("specs_show") or "").split(",")))
+        over = parse_kv(s.get("spec_overrides") or "")
+        for k, (cb, ov) in self._spec_rows.items():
+            cb.setChecked(not shown or k in shown)
+            ov.setText(over.get(k, ""))
+        self.next_label.setText(
+            s.get("next_label", DEFAULT_NEXT_LABEL))
+        self.next_label.setPlaceholderText(DEFAULT_NEXT_LABEL)
+        self.spec_drops.setText(s.get("spec_drops") or "")
+        i = self.date_fmt.findData(s.get("date_format") or "compact")
+        self.date_fmt.setCurrentIndex(max(i, 0))
+        i = self.desc_mode.findData(s.get("desc_mode") or "auto")
+        self.desc_mode.setCurrentIndex(max(i, 0))
+        self.desc_max.setValue(int(s.get("desc_max") or 0))
         self.maxev.setValue(s["max_events"])
         i = self.limit_mode.findData(s.get("limit_mode") or "count")
         self.limit_mode.setCurrentIndex(max(i, 0))
@@ -344,6 +394,11 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
         try:
             self.limit_date.setDate(
                 QDate.fromString(s.get("limit_date") or "", "yyyy-MM-dd"))
+            # limit_from alimente aussi range_from (widgets liés)
+            self.limit_from.setDate(
+                QDate.fromString(s.get("limit_from") or "", "yyyy-MM-dd"))
+            self.range_to.setDate(
+                QDate.fromString(s.get("limit_to") or "", "yyyy-MM-dd"))
         except Exception:
             pass
         self.res.setCurrentIndex(
@@ -393,13 +448,15 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
         self.ss_transition.setCurrentIndex(
             max(0, self.ss_transition.findData(s["ss_transition"])))
         self.ss_tdur.setValue(s["ss_tdur"] or 1500)
-        i = self.ss_screen.findData(int(s.get("ss_screen") or -1))
+        v = s.get("ss_screen")
+        i = self.ss_screen.findData(-1 if v in (None, "") else int(v))
         self.ss_screen.setCurrentIndex(max(i, 0))
         self.ss_delay_p.setValue(s["ss_delay_p"] or 8)
         self.ss_transition_p.setCurrentIndex(
             max(0, self.ss_transition_p.findData(s["ss_transition_p"])))
         self.ss_tdur_p.setValue(s["ss_tdur_p"] or 1500)
-        i = self.ss_screen_p.findData(int(s.get("ss_screen_p") or -1))
+        v = s.get("ss_screen_p")
+        i = self.ss_screen_p.findData(-1 if v in (None, "") else int(v))
         self.ss_screen_p.setCurrentIndex(max(i, 0))
         self._refresh_gallery()
 
@@ -408,6 +465,28 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
     def _run(self):
         if state["running"]:
             return
+        # pré-flight : un blocage empêche le run, un avertissement
+        # demande confirmation — partir sur des réglages faux produit
+        # un journal d'erreurs peu lisible pour l'utilisateur
+        from nextevents.preflight import validate_settings
+        from PySide6.QtWidgets import QMessageBox
+        issues = validate_settings(load_settings())
+        blockers = [i for i in issues if i.level == "blocker"]
+        if blockers:
+            QMessageBox.warning(
+                self, "Génération impossible",
+                "Corrigez d'abord ces réglages :\n\n" + "\n".join(
+                    f"• {i.msg}  (onglet {i.tab})" for i in blockers))
+            return
+        if issues:
+            r = QMessageBox.question(
+                self, "Réglages à vérifier",
+                "La génération peut partir, mais :\n\n" + "\n".join(
+                    f"• {i.msg}  (onglet {i.tab})" for i in issues)
+                + "\n\nGénérer quand même ?",
+                QMessageBox.Yes | QMessageBox.No)
+            if r != QMessageBox.Yes:
+                return
         self.run_btn.setEnabled(False)
         self.log.clear()
         self._log_seen = 0
@@ -415,6 +494,12 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
 
     def _run_bg(self):
         run_generation()
+
+    def _show_help(self):
+        """Dialog d'aide sur la rubrique de l'onglet courant —
+        les index de ui.help.TOPICS suivent l'ordre des onglets."""
+        from .help import HelpDialog
+        HelpDialog(self, self._tabs.currentIndex()).exec()
 
     def _after_generate(self):
         self._refresh_gallery()
@@ -450,7 +535,9 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
         self._io_tick += 1
         if self._io_tick >= 10 or was != running:
             self._io_tick = 0
-            self._n_slides = len(slides())
+            # diapos paysage + portrait — une génération portrait-only
+            # laissait le compteur à 0
+            self._n_slides = len(slides()) + len(slides_portrait())
             s = load_settings()
             from nextevents.runner import _interval_min
             self._sched_interval = _interval_min(s)

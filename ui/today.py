@@ -9,8 +9,8 @@ génération du HTML+PNG et envoi vers les partages configurés.
 import json
 import threading
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPixmap
+from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QComboBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
     QPlainTextEdit, QPushButton, QScrollArea, QVBoxLayout, QWidget,
@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 from nextevents.settings import load_settings, resolve_out_dir
 from nextevents.scrape import series_brand
 from nextevents.slide import SIZES, DEFAULT_SIZE
+from .style import PLUS_IMG, X_IMG
 
 BG_CHOICES = [
     ("#141414", "Encre"), ("#302f2e", "Anthracite"),
@@ -117,6 +118,11 @@ class TodayTab(QWidget):
         row = QHBoxLayout()
         row.addWidget(QLabel("Événement"))
         self.ev = QComboBox()
+        self.ev.setToolTip(
+            "Événement de la diapo du jour — la liste vient de la "
+            "dernière génération (Ctrl+G dans Général pour la "
+            "rafraîchir). Le choix pré-remplit titre, intervenants, "
+            "notes et accessibilité.")
         self.ev.setMinimumWidth(420)
         self.ev.currentIndexChanged.connect(self._prefill)
         row.addWidget(self.ev, 1)
@@ -130,18 +136,27 @@ class TodayTab(QWidget):
         f = QFormLayout()
         f.setLabelAlignment(Qt.AlignRight)
         self.title = QLineEdit()
+        self.title.setToolTip(
+            "Titre affiché sur la diapo — pré-rempli depuis "
+            "l'événement, modifiable.")
         f.addRow("Titre", self.title)
         form.addLayout(f)
 
         self._spk_box = QVBoxLayout()
         form.addLayout(self._spk_box)
         row = QHBoxLayout()
-        add = QPushButton("+ intervenant")
+        add = QPushButton(" Ajouter un intervenant")
         add.setProperty("ghost", True)
+        add.setIcon(QIcon(PLUS_IMG))
+        add.setIconSize(QSize(13, 13))
+        add.setToolTip("Ajoute une ligne intervenant : nom et qualité "
+                       "(fonction, affiliation).")
         add.clicked.connect(lambda: self._add_speaker("", ""))
         row.addWidget(add)
         row.addWidget(QLabel("Animé par"))
         self.moderator = QLineEdit()
+        self.moderator.setToolTip("Nom de l'animateur/animatrice, "
+                                  "affiché sous les intervenants.")
         self.moderator.setFixedWidth(230)
         row.addWidget(self.moderator)
         row.addStretch(1)
@@ -173,11 +188,17 @@ class TodayTab(QWidget):
         self.note.setPlaceholderText(
             "En partenariat avec …\n"
             "Rencontre suivie d'une séance de dédicace")
+        self.note.setToolTip(
+            "Mentions en pied de page de la diapo, une par ligne.")
         self.note.setFixedHeight(60)
         f.addRow("Notes — pied de page\n(une ligne par mention)",
                  self.note)
         self.access = QPlainTextEdit()
         self.access.setPlaceholderText("Interprétation en LSF")
+        self.access.setToolTip(
+            "Mentions d'accessibilité affichées sur la diapo "
+            "(LSF, audiodescription, boucle magnétique…), une par "
+            "ligne.")
         self.access.setFixedHeight(60)
         f.addRow("Accessibilité\n(une ligne par mention)", self.access)
         form.addLayout(f)
@@ -219,11 +240,15 @@ class TodayTab(QWidget):
         row = QHBoxLayout()
         g = QPushButton("Générer la diapo du jour")
         g.setProperty("accent", True)
+        g.setToolTip(
+            "Produit index.png (+ qr.png pour les séries) dans "
+            "today/ et les envoie vers les destinations configurées.")
         self._gen_btn = g
         g.clicked.connect(self._generate)
         row.addWidget(g)
         pv = QPushButton("Aperçu")
         pv.setProperty("ghost", True)
+        pv.setToolTip("Ouvre la dernière diapo générée en grand.")
         pv.clicked.connect(self._preview)
         row.addWidget(pv)
         self.gen_lbl = QLabel("")
@@ -277,9 +302,12 @@ class TodayTab(QWidget):
         n.setFixedWidth(230)
         q = QLineEdit(qual,
                       placeholderText="Qualité (fonction, affiliation…)")
-        x = QPushButton("×")
+        x = QPushButton()
         x.setProperty("ghost", True)
+        x.setIcon(QIcon(X_IMG))
+        x.setIconSize(QSize(12, 12))
         x.setFixedWidth(32)
+        x.setToolTip("Retirer cet intervenant")
         x.clicked.connect(
             lambda: (self._spk_box.removeWidget(row),
                      row.deleteLater()))

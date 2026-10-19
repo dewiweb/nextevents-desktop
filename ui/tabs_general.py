@@ -38,30 +38,90 @@ class GeneralTabMixin:
                                  suffix=" min (0 = off)")
         self.interval.setSingleStep(5)
         self.interval.setFixedWidth(160)
+        self.interval.setToolTip(
+            "Régénère les diapos automatiquement toutes les N minutes.\n"
+            "0 = pas de rafraîchissement automatique (génération "
+            "manuelle ou heures fixes).")
         self.sched_times = QLineEdit()
         self.sched_times.setPlaceholderText("ex. 06:00, 18:30")
         self.sched_times.setFixedWidth(190)
-        # limitation des diapos : nombre, horizon en jours, ou date
+        self.sched_times.setToolTip(
+            "Heures fixes de génération au format HH:MM, séparées par "
+            "des virgules — cumulables avec l'intervalle. Les diapos "
+            "sont aussi à jour dès l'ouverture du poste si « Lancer "
+            "l'application à l'ouverture de session » est coché.")
+        # limitation des diapos : nombre, horizon en jours, ou dates
         self.limit_mode = QComboBox()
         self.limit_mode.setFixedWidth(190)
+        self.limit_mode.setToolTip(
+            "Quelles diapos produire : les N premiers événements à "
+            "venir, tout ce qui a lieu dans les N prochains jours, "
+            "jusqu'à une date, à partir d'une date ou entre deux "
+            "dates. Un événement en cours (expo permanente…) reste "
+            "affiché.")
         self.limit_mode.addItem("Premiers N événements", "count")
         self.limit_mode.addItem("Dans les N jours", "days")
         self.limit_mode.addItem("Jusqu'au …", "date")
+        self.limit_mode.addItem("À partir du …", "from")
+        self.limit_mode.addItem("Du … au …", "range")
         self._limit_stack = QStackedWidget()
         self.maxev = QSpinBox(minimum=0, maximum=999,
                               suffix=" (0 = tous)")
         self.maxev.setFixedWidth(160)
+        self.maxev.setToolTip(
+            "Nombre maximum de diapos générées (0 = tous les "
+            "événements).")
         self.limit_days = QSpinBox(minimum=1, maximum=365, value=14,
                                    suffix=" jours")
         self.limit_days.setFixedWidth(160)
+        self.limit_days.setToolTip(
+            "Inclut les événements dont la fenêtre touche les N "
+            "prochains jours.")
         self.limit_date = QDateEdit(calendarPopup=True)
+        self.limit_date.setToolTip(
+            "Inclut les événements jusqu'à cette date (incluse).")
         self.limit_date.setFixedWidth(160)
         self.limit_date.setDate(
             QDate.currentDate().addDays(30))
         self.limit_date.setMinimumDate(QDate.currentDate())
+        self.limit_from = QDateEdit(calendarPopup=True)
+        self.limit_from.setToolTip(
+            "Inclut les événements à partir de cette date (incluse) "
+            "— sans borne de fin.")
+        self.limit_from.setFixedWidth(160)
+        self.limit_from.setDate(QDate.currentDate())
+        # plage « du … au … » : deux dates côte à côte ; la borne de
+        # début est le même réglage que « À partir du » — les widgets
+        # sont synchronisés (setDate n'émet dateChanged que sur
+        # changement réel → pas de récursion)
+        self.range_from = QDateEdit(calendarPopup=True)
+        self.range_from.setFixedWidth(140)
+        self.range_from.setDate(QDate.currentDate())
+        self.range_from.setToolTip(
+            "Inclut les événements à partir de cette date (incluse).")
+        self.range_to = QDateEdit(calendarPopup=True)
+        self.range_to.setFixedWidth(140)
+        self.range_to.setDate(QDate.currentDate().addDays(30))
+        self.range_to.setToolTip(
+            "Inclut les événements jusqu'à cette date (incluse).")
+        range_w = QWidget()
+        rl = QHBoxLayout(range_w)
+        rl.setContentsMargins(0, 0, 0, 0)
+        rl.addWidget(self.range_from)
+        rl.addWidget(QLabel("→"))
+        rl.addWidget(self.range_to)
+        rl.addStretch(1)
+        self.limit_from.dateChanged.connect(self.range_from.setDate)
+        self.range_from.dateChanged.connect(self.limit_from.setDate)
+        # la fin ne peut pas précéder le début : choisir un début
+        # ultérieur à la fin la fait avancer
+        self.range_from.dateChanged.connect(
+            self.range_to.setMinimumDate)
         self._limit_stack.addWidget(self.maxev)
         self._limit_stack.addWidget(self.limit_days)
         self._limit_stack.addWidget(self.limit_date)
+        self._limit_stack.addWidget(self.limit_from)
+        self._limit_stack.addWidget(range_w)
         self.limit_mode.currentIndexChanged.connect(
             self._limit_stack.setCurrentIndex)
         row = QHBoxLayout()
@@ -70,11 +130,25 @@ class GeneralTabMixin:
         row.addStretch(1)
         self.res = QComboBox()
         self.res.setFixedWidth(220)
+        self.res.setToolTip(
+            "Taille des PNG générés. UHD pour les écrans 4K ; HD "
+            "suffit pour la plupart des diffusions et des impressions "
+            "courantes.")
         self.res.addItem("UHD 3840×2160", "uhd")
         self.res.addItem("HD 1920×1080", "hd")
         self.gen_ls = QCheckBox("Paysage — dans le dossier de sortie")
+        self.gen_ls.setToolTip(
+            "Produit les diapos 16:9 dans landscape/ — TV, diaporama "
+            "paysage, écrans de la médiathèque.")
         self.gen_pt = QCheckBox("Portrait — sous-dossier portrait/")
+        self.gen_pt.setToolTip(
+            "Produit les diapos dans portrait/ — impression A4 ou "
+            "écran pivoté 9:16 selon le format choisi.")
         self.portrait_fmt = QComboBox()
+        self.portrait_fmt.setToolTip(
+            "A4 : pour l'impression (marges et densité adaptées).\n"
+            "Écran 9:16 : écran 16:9 monté en vertical (totem, "
+            "borne).")
         self.portrait_fmt.addItem("A4 — impression", "a4")
         self.portrait_fmt.addItem("Écran 9:16 — diffusion", "screen")
         self.portrait_fmt.setEnabled(False)
@@ -99,10 +173,89 @@ class GeneralTabMixin:
         from nextevents.scrape import CATEGORIES
         for i, (label, slug) in enumerate(CATEGORIES):
             cb = QCheckBox(label)
+            cb.setToolTip(
+                "Inclure cette catégorie d'événements dans la "
+                "génération — décocher pour l'exclure.")
             self._cat_boxes[slug] = cb
             grid.addWidget(cb, i // 2, i % 2)
         f.addRow(grid)
         lay.addWidget(catsbox)
+
+        sp = QGroupBox("Informations affichées (specs)")
+        f = QFormLayout(sp)
+        f.setLabelAlignment(Qt.AlignRight)
+        # une ligne par spec : case « afficher » + champ de valeur
+        # forcée (vide = valeur de la source). Date : toujours
+        # affichée, elle sert au nommage des fichiers.
+        self._spec_rows = {}
+        for key in ("Durée", "Lieu", "Tarif", "Public",
+                    "Accessibilité"):
+            cb = QCheckBox(key)
+            cb.setChecked(True)
+            cb.setToolTip(
+                f"Afficher « {key} » sur les diapos — décocher pour "
+                "masquer cette information partout.")
+            ov = QLineEdit(placeholderText="valeur forcée (optionnel)")
+            ov.setToolTip(
+                f"Force la valeur affichée pour « {key} » sur toutes "
+                "les diapos (ex. Lieu = Auditorium). Vide = valeur "
+                "de la source.")
+            ov.setMinimumWidth(220)
+            row = QHBoxLayout()
+            row.addWidget(cb)
+            row.addWidget(ov, 1)
+            f.addRow(row)
+            self._spec_rows[key] = (cb, ov)
+        self.spec_drops = QLineEdit()
+        self.spec_drops.setPlaceholderText(
+            "Boucle magnétique, Casque amplifié, …")
+        self.spec_drops.setToolTip(
+            "Valeurs à retirer des specs, séparées par des virgules — "
+            "un item est enlevé d'une liste « a · b · c » sans perdre "
+            "le reste ; si tous les items d'une spec sont masqués, "
+            "la spec est omise")
+        f.addRow("Valeurs masquées", self.spec_drops)
+        self.next_label = QLineEdit()
+        self.next_label.setToolTip(
+            "Préfixe de la spec Date pour les événements à plusieurs "
+            "séances — vide = afficher la date seule")
+        f.addRow("Préfixe récurrent", self.next_label)
+        self.date_fmt = QComboBox()
+        self.date_fmt.setFixedWidth(190)
+        self.date_fmt.setToolTip(
+            "Format de la spec « Date » — l'heure et les structures "
+            "« Du … au … » / préfixe récurrent sont préservés.")
+        self.date_fmt.addItem("15/11/26", "compact")
+        self.date_fmt.addItem("15/11 (sans année)", "noyear")
+        self.date_fmt.addItem("sam. 15 nov.", "short")
+        self.date_fmt.addItem("samedi 15 novembre", "long")
+        f.addRow("Format de date", self.date_fmt)
+        self.desc_mode = QComboBox()
+        self.desc_mode.setFixedWidth(190)
+        self.desc_mode.setToolTip(
+            "Texte de la description sur la diapo : le chapeau "
+            "(court), la description détaillée, ou automatique "
+            "(détaillée si présente, chapeau sinon). Le nombre de "
+            "lignes est borné par le gabarit ; 0 car. = borne sûre "
+            "par défaut (400 car.).")
+        self.desc_mode.addItem("Automatique", "auto")
+        self.desc_mode.addItem("Chapeau seul", "chapeau")
+        self.desc_mode.addItem("Longue description", "long")
+        self.desc_max = QSpinBox(minimum=0, maximum=5000, value=400,
+                                 suffix=" car.")
+        self.desc_max.setFixedWidth(160)
+        self.desc_max.setToolTip(
+            "Troncature de la description en caractères — la coupe se "
+            "fait en fin de phrase, jamais au milieu d'un mot. "
+            "Plafonnée par la capacité du gabarit (≈ 280 car. en "
+            "paysage, 440 en A4, 480 en écran portrait) ; "
+            "0 = borne sûre par défaut (400 car.).")
+        drow = QHBoxLayout()
+        drow.addWidget(self.desc_mode)
+        drow.addWidget(self.desc_max)
+        drow.addStretch(1)
+        f.addRow("Description", drow)
+        lay.addWidget(sp)
 
         sers = QGroupBox("Séries éditoriales — identifiant = Libellé "
                          "[| logo.png] par ligne (slug de page du site "
@@ -112,6 +265,14 @@ class GeneralTabMixin:
         self.series_map.setMaximumHeight(72)
         self.series_map.setPlaceholderText(
             "grandstemoins = Les grands témoins | logo-gt.png")
+        self.series_map.setToolTip(
+            "Une ligne par série éditoriale :\n"
+            "« identifiant = Libellé affiché »\n"
+            "« identifiant = Libellé | logo.png » pour ajouter le "
+            "logo de la série.\n"
+            "L'identifiant est le slug de la page série du site ou "
+            "un mot-clé OpenAgenda — le bouton « Détecter » propose "
+            "les candidats trouvés dans les sources.")
         f.addRow(self.series_map)
         row = QHBoxLayout()
         det = QPushButton("Détecter dans les sources")
@@ -129,16 +290,32 @@ class GeneralTabMixin:
         f = QFormLayout(oa)
         f.setLabelAlignment(Qt.AlignRight)
         self.data_source = QComboBox()
+        self.data_source.setToolTip(
+            "« Site web » lit les événements sur leschampslibres.fr "
+            "(couleur éditoriale de la carte incluse).\n"
+            "« OpenAgenda » interroge l'API avec la clé ci-dessous — "
+            "si elle est injoignable, la génération replie "
+            "automatiquement sur le site.")
         self.data_source.addItem("Site web (scraping)", "site")
         self.data_source.addItem("OpenAgenda", "openagenda")
         f.addRow("Source", self.data_source)
         self.oa_agenda = QLineEdit(placeholderText="leschampslibres")
+        self.oa_agenda.setToolTip(
+            "Identifiant de l'agenda OpenAgenda (le slug visible dans "
+            "l'URL openagenda.com/agendas/…).")
         self.oa_key = _pw("(non défini)")
+        self.oa_key.setToolTip(
+            "Clé API OpenAgenda (gratuite, compte sur openagenda.com)."
+            "\nInutile si la source est « Site web ». Stockée dans "
+            "le trousseau du système quand il existe.")
         f.addRow("Agenda", self.oa_agenda)
         f.addRow("Clé API", self.oa_key)
         row = QHBoxLayout()
         t = QPushButton("Tester la clé")
         t.setProperty("ghost", True)
+        t.setToolTip(
+            "Interroge l'API OpenAgenda avec l'agenda et la clé "
+            "saisis — vérifie qu'ils répondent avant de générer.")
         t.clicked.connect(lambda: self._test("oa"))
         row.addWidget(t)
         self.oa_test = QLabel("")
@@ -179,6 +356,10 @@ class GeneralTabMixin:
         f.addRow("Session", self.autostart_app)
         self.autostart_ss = QComboBox()
         self.autostart_ss.setFixedWidth(220)
+        self.autostart_ss.setToolTip(
+            "Ouvre automatiquement le diaporama au lancement de "
+            "l'app — à combiner avec « Lancer l'application à "
+            "l'ouverture de session » sur un poste d'affichage.")
         self.autostart_ss.addItem("Pas de diaporama", "none")
         self.autostart_ss.addItem("Diaporama paysage", "landscape")
         self.autostart_ss.addItem("Diaporama portrait", "portrait")
@@ -241,31 +422,46 @@ class GeneralTabMixin:
             f"{len(added)} série(s) ajoutée(s), "
             f"{len(found) - len(added)} déjà listée(s)")
 
-    def _check_update(self):
+    def _check_update(self, quiet=False):
         """Interroge l'API GitHub releases en worker — résultat livré
-        par le signal update_done dans le thread GUI."""
-        self.update_lbl.setText("recherche…")
+        par le signal update_done dans le thread GUI. `quiet` (check
+        automatique au démarrage) : « recherche… » et « à jour » ne
+        polluent pas le libellé — seule une nouveauté s'affiche."""
+        self._upd_quiet = quiet
+        if not quiet:
+            self.update_lbl.setText("recherche…")
 
         def work():
             try:
                 from nextevents.net import get
+                # releases/latest ignore les préreleases — or les betas
+                # sont marquées prerelease. On prend donc la liste, et
+                # pick_newer en extrait la plus récente admissible
+                # (l'API ne trie pas par version)
+                from nextevents.version import pick_newer
                 d = get("https://api.github.com/repos/dewiweb/"
-                        "nextevents-desktop/releases/latest").json()
-                self.update_done.emit(d.get("tag_name") or "",
-                                      d.get("html_url") or "")
+                        "nextevents-desktop/releases?per_page=20").json()
+                tag, url = pick_newer(d)
+                self.update_done.emit(tag, url)
             except Exception as e:
                 self.update_done.emit("", str(e))
 
         threading.Thread(target=work, daemon=True).start()
 
     def _on_update_done(self, tag, url_or_err):
+        quiet = getattr(self, "_upd_quiet", False)
         if not tag:
-            self.update_lbl.setText(f"échec : {url_or_err}")
+            if not quiet:
+                self.update_lbl.setText(f"échec : {url_or_err}")
             return
         from nextevents.version import VERSION, newer_than_current
         if newer_than_current(tag):
             self.update_lbl.setText(
                 f'<a href="{url_or_err}" style="color:#c99483">'
                 f"{tag} disponible — télécharger</a>")
-        else:
+            if quiet:
+                self.statusBar().showMessage(
+                    f"Nouvelle version {tag} disponible — "
+                    "voir l'onglet Général", 8000)
+        elif not quiet:
             self.update_lbl.setText(f"à jour ({VERSION})")

@@ -75,10 +75,11 @@ interne — le rendu, le filtrage et la diapo du jour sont identiques.
 - **Catégories** : cases à cocher par catégorie du programme (les 10
   slugs du site) ; la sélection vide = aucun événement. Côté OA, le
   filtrage mappe les catégories OA (`_oa_cat`) sur les slugs site.
-- **Limiteur** (réglage « Affichage ») : trois modes —
-  `Nombre max` (historique), `Dans les N jours`, `Jusqu'au <date>`.
+- **Limiteur** (réglage « Affichage ») : cinq modes —
+  `Nombre max` (historique), `Dans les N jours`, `Jusqu'au <date>`,
+  `À partir du <date>` et `Du <début> au <fin>`.
   Un événement est gardé si sa fenêtre [début, fin] intersecte
-  [aujourd'hui, horizon] — les expos en cours restent donc visibles.
+  celle du filtre — les expos en cours restent donc visibles.
 
 ## Specs affichées sur les diapos
 
@@ -86,12 +87,20 @@ Ordre fixe `SPEC_ORDER`, chaque ligne absente est omise :
 
 | Spec | Contenu / règles |
 |---|---|
-| **Date** | `JJ/MM/AA à HHh` (séance unique) · `Du … au …` (multi-jours) · `Prochaine séance : …` (récurrent, > 1 séance à venir) · `Exposition permanente` |
+| **Date** | `JJ/MM/AA à HHh` (séance unique) · `Du … au …` (multi-jours) · `Prochaine séance : …` (récurrent, > 1 séance à venir) · `Exposition permanente` — format de la date configurable : `JJ/MM/AA` (défaut), `JJ/MM`, `sam. 15 nov.`, `samedi 15 novembre` |
 | **Durée** | `1h30` — masquée si ≥ 4 h (plage d'ouverture, pas une séance) |
 | **Lieu** | omis pour les « Temps fort » multi-sites |
 | **Tarif** | texte OA `conditions` ou carte site |
 | **Public** | `Familles · dès 8 ans` (schéma OA `publics` + `age.min`) |
 | **Accessibilité** | keywords OA `def*` ∪ mentions dans le texte |
+
+Réglage « Informations affichées » (Général) — chaque spec peut être
+**masquée** (case décochée) ou **forcée** à une valeur constante
+(champ à droite : ex. `Lieu = Auditorium` si le champ lieu OA désigne
+autre chose). La Date reste toujours affichée — elle sert au nommage.
+Le préfixe des récurrents (« Prochaine séance : ») est éditable —
+vide = date seule. Appliqué après collecte : couvre indifféremment
+les trois sources (site, OA legacy, OA v2).
 
 ### D'où viennent les horaires
 
@@ -191,6 +200,14 @@ trousseau au premier enregistrement des réglages.
 > [Antivirus](#antivirus--réputation-symantec-smartscreen)). Cliquer
 > « Informations complémentaires » → « Exécuter quand même ».
 
+Au tout premier lancement (aucun réglage enregistré), un **assistant
+de configuration** propose de déclarer l'usage du poste — diffusion
+sur un écran local, impression A4, copie vers un dossier partagé,
+envoi FTP/SMB — et pré-remplit les réglages correspondants (formats
+générés, écran, démarrage auto, destinations). « Passer » peut être
+reproposé au prochain lancement ou appliquer les défauts ; tout reste
+modifiable ensuite dans les onglets.
+
 Lancer `nextevents.exe` / l'AppImage → fenêtre principale :
 
 - **Général** — réglages (intervalle, nb d'événements, résolution,
@@ -219,6 +236,10 @@ clic sur l'icône la réaffiche. Clic droit : Afficher / Générer
 maintenant / Diaporama paysage / Diaporama portrait / Dossier de
 destination… / Ouvrir les diapos / Quitter.
 
+Le bouton **Générer** vérifie les réglages avant de partir : un
+blocage (aucun format coché…) l'arrête avec la liste des corrections,
+un avertissement (destination incomplète…) demande confirmation.
+
 Sur un poste d'affichage : cocher **« Lancer l'application à
 l'ouverture de session »** (onglet Général → Application) pour que
 l'app survive aux redémarrages, et choisir l'écran de diffusion dans
@@ -227,6 +248,26 @@ Galerie → Lecture.
 L'infobulle de l'icône affiche le nombre de diapos et l'état. Journal
 applicatif : `data/app.log`. Diagnostic du rendu : `--diag` →
 `data/diag.log`.
+
+## Maquette graphique (ajuster la charte)
+
+Les gabarits des diapos sont éditables **sans environnement de dev** —
+un éditeur de texte suffit. La charte commune (pastille, crédit photo,
+specs, pied de page, fontes) vit dans `assets/slide_base.css` ; les
+métriques de chaque format (marges, tailles, cadrage) sont des
+variables nommées et commentées dans le bloc `:root` en tête de chaque
+`slide_template*.html`.
+
+- **Windows** : les fichiers sont en clair dans
+  `nextevents/_internal/assets/` — éditer, relancer `nextevents.exe`,
+  régénérer une diapo depuis la galerie.
+- **Linux / AppImage** : `./maquette.sh` extrait les gabarits dans
+  `maquette-assets/` et lance l'app dessus — même boucle d'édition.
+
+Le HTML généré (`data/diaporama/html/*.html`) est autonome : il
+s'ouvre tel quel dans un navigateur pour un contrôle plein écran.
+Une fois la retouche validée, reporter la valeur dans les sources —
+les assets du bundle sont en lecture seule.
 
 ## Build Windows (Python ≥ 3.11)
 

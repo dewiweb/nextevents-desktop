@@ -32,7 +32,11 @@ def preview_image(parent, path, title):
     # modale/transient-for ne passe pas plein écran sur plusieurs WM
     # Linux (F11 muet) — Qt.Window fait de l'aperçu une fenêtre
     # top-level à part entière, tout en restant détruite avec le parent.
-    old = getattr(parent, "_preview_dlg", None)
+    # suivi sur la fenêtre principale (parent.window()) : Galerie et
+    # Diapo du jour appellent avec des parents différents — un aperçu
+    # par parent en laisserait deux cohabiter
+    top = parent.window()
+    old = getattr(top, "_preview_dlg", None)
     if old is not None:
         try:
             old.close()      # wrapper valide seulement s'il est ouvert
@@ -50,7 +54,7 @@ def preview_image(parent, path, title):
     v.addWidget(sl)
     QShortcut(QKeySequence("F11"), d, activated=lambda:
               d.showNormal() if d.isFullScreen() else d.showFullScreen())
-    parent._preview_dlg = d
+    top._preview_dlg = d
     d.show()
     d.raise_()
     d.activateWindow()

@@ -6,7 +6,8 @@ import threading
 
 from nextevents.runner import run_generation, scheduler
 from nextevents.settings import (
-    load_settings, resolve_out_dir, save_settings, state,
+    SETTINGS_FILE, load_settings, resolve_out_dir, save_settings,
+    state,
 )
 
 
@@ -145,11 +146,37 @@ def run(icon_path):
 
     threading.Thread(target=scheduler, daemon=True).start()
 
+    # sonde navigateur en tâche de fond : le premier launch peut être
+    # long (scan AV du profil temporaire sur poste géré) — le résultat
+    # est en cache quand l'utilisateur clique « Générer »
+    from nextevents import preflight
+    preflight.start_browser_probe()
+
+    # premier lancement : aucun settings.json → assistant de
+    # configuration par usages (écran, impression, envoi…).
+    # « Passer » : reproposé au prochain démarrage, ou les défauts
+    # sont écrits si l'utilisateur choisit « ne plus proposer ».
+    if not SETTINGS_FILE.exists():
+        from .wizard import SetupWizard
+        wiz = SetupWizard(win)
+        _show()
+        if wiz.exec():
+            win._load()
+            win._save()   # applique aussi autostart côté OS
+            if wiz.generate_now:
+                win._run()
+        elif wiz.persist_defaults:
+            save_settings(load_settings())
+
     prefs = load_settings()
     mode = prefs.get("autostart_slideshow", "none")
     if mode in ("landscape", "portrait"):
         QTimer.singleShot(
             500, lambda: win._open_slideshow(mode == "portrait"))
+    # vérif de mise à jour silencieuse au démarrage : une nouvelle
+    # release remonte dans la barre de statut + onglet Général
+    QTimer.singleShot(
+        8000, lambda: win._check_update(quiet=True))
     if tray_ok and prefs.get("start_minimized", 0):
         win.hide()      # démarre dans le tray, sans fenêtre
     else:
@@ -157,7 +184,6 @@ def run(icon_path):
 
     # crash au run précédent (sys.excepthook → data/crash.log, desktop
     # .py) : on le signale une fois puis on purge pour ne pas re-notifier
-    from nextevents.settings import SETTINGS_FILE
     crash_log = SETTINGS_FILE.parent / "crash.log"
     if crash_log.exists():
         try:

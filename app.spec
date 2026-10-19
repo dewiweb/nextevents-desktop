@@ -14,6 +14,7 @@ binaries = []
 hiddenimports = [
     "PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets",
     "PySide6.QtNetwork",  # instance unique (QLocalServer/Socket)
+    "PySide6.QtPrintSupport",  # impression des diapos (galerie)
     "smbprotocol", "qrcode", "playwright",
 ]
 

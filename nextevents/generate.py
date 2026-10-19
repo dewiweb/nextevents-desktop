@@ -1,5 +1,6 @@
 """Orchestration : scraping → images → HTML → PNG → manifeste → synchros."""
 
+import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -19,7 +20,8 @@ from .slide import (
 from .sync import sync_ftp, sync_local, sync_smb
 
 
-def _render_set(events, fonts, dest, size, orientation="landscape"):
+def _render_set(events, fonts, dest, size, orientation="landscape",
+                desc_mode="auto", desc_max=400):
     """Génère un jeu de diapos (HTML + PNG) dans `dest` et y supprime
     les fichiers obsolètes. Retourne la liste des PNG du jeu."""
     dest.mkdir(parents=True, exist_ok=True)
@@ -38,7 +40,8 @@ def _render_set(events, fonts, dest, size, orientation="landscape"):
         expected_png.add(f"{name}.png")
         expected_html.add(f"{name}.html")
         hp, pp = html_dir / f"{name}.html", dest / f"{name}.png"
-        content = slide_html(ev, i - 1, fonts, orientation)
+        content = slide_html(ev, i - 1, fonts, orientation,
+                             desc_mode, desc_max)
         # PNG corrompu/interrompu → on re-rend plutôt que tout échouer
         try:
             same_size = pp.exists() and Image.open(pp).size == size
@@ -51,6 +54,10 @@ def _render_set(events, fonts, dest, size, orientation="landscape"):
         ):
             continue
         hp.write_text(content, encoding="utf-8")
+        # le PNG existant ne correspond plus au HTML : le retirer pour
+        # ne pas publier une diapo périmée si le rendu échoue
+        if pp.exists():
+            pp.unlink()
         to_render.append((hp, pp))
 
     for p in dest.glob("*.png"):
@@ -76,26 +83,42 @@ def _render_set(events, fonts, dest, size, orientation="landscape"):
 
 
 def _limit_events(events, cfg, max_events):
-    """Filtre de fin de liste : par nombre (historique), par horizon
-    « dans les N jours » ou « jusqu'au <date> ». Un événement est gardé
-    si sa fenêtre [début, fin] intersecte [aujourd'hui, horizon] —
-    les multi-jours en cours (épinglés) restent donc visibles."""
+    """Filtre de fin de liste : par nombre (historique) ou par fenêtre
+    — « dans les N jours », « jusqu'au <date> », « à partir du
+    <date> », « du <début> au <fin> ». Un événement est gardé si sa
+    fenêtre [début, fin] intersecte celle du filtre — les multi-jours
+    en cours (épinglés) restent donc visibles."""
     import datetime
     cfg = cfg or {}
     mode = cfg.get("limit_mode", "count")
     if mode == "count":
         return events[:max_events] if max_events else events
     today = datetime.date.today()
+
+    def _iso(key):
+        try:
+            return datetime.date.fromisoformat(str(cfg.get(key) or ""))
+        except ValueError:
+            return None
+
     if mode == "days":
-        horizon = today + datetime.timedelta(
+        lo, hi = today, today + datetime.timedelta(
             days=int(cfg.get("limit_days") or 0))
     elif mode == "date":
-        try:
-            horizon = datetime.date.fromisoformat(
-                str(cfg.get("limit_date") or ""))
-        except ValueError:
-            return events
+        lo, hi = today, _iso("limit_date")
+    elif mode == "from":
+        lo, hi = _iso("limit_from"), None
+    elif mode == "range":
+        lo, hi = _iso("limit_from"), _iso("limit_to")
+        if lo and hi and lo > hi:
+            lo, hi = hi, lo  # bornes inversées dans les réglages
     else:
+        return events
+    # borne requise absente/invalide : pas de filtre plutôt qu'une
+    # liste vide qui ferait échouer toute la génération
+    if (mode == "date" and hi is None) \
+            or (mode == "from" and lo is None) \
+            or (mode == "range" and (lo is None or hi is None)):
         return events
     out = []
     for ev in events:
@@ -105,9 +128,88 @@ def _limit_events(events, cfg, max_events):
             continue
         e = ev.get("_dt_end") or s
         sd, ed = datetime.date(*s[:3]), datetime.date(*e[:3])
-        if sd <= horizon and ed >= today:
+        if (hi is None or sd <= hi) and (lo is None or ed >= lo):
             out.append(ev)
     return out
+
+
+_DOW_S = ("lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim.")
+_DOW_L = ("lundi", "mardi", "mercredi", "jeudi", "vendredi",
+          "samedi", "dimanche")
+_MON_S = ("janv.", "févr.", "mars", "avr.", "mai", "juin",
+          "juil.", "août", "sept.", "oct.", "nov.", "déc.")
+_MON_L = ("janvier", "février", "mars", "avril", "mai", "juin",
+          "juillet", "août", "septembre", "octobre", "novembre",
+          "décembre")
+
+
+def _reformat_date_spec(text, fmt):
+    """Reformate les dates « JJ/MM/AA » de la spec Date — l'heure,
+    « Du … au … » et le préfixe récurrent sont préservés (le token
+    JJ/MM/AA est le seul invariant commun aux sources site et
+    OpenAgenda). Jours/mois en tables françaises locales : pas de
+    dépendance à la locale OS."""
+    import datetime
+
+    def repl(m):
+        dd, mm, yy = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if fmt == "noyear":
+            return f"{dd:02d}/{mm:02d}"
+        wd = datetime.date(2000 + yy, mm, dd).weekday()
+        if fmt == "short":
+            return f"{_DOW_S[wd]} {dd} {_MON_S[mm - 1]}"
+        if fmt == "long":
+            return f"{_DOW_L[wd]} {dd} {_MON_L[mm - 1]}"
+        return m.group(0)
+
+    return re.sub(r"(?<!\d)(\d{2})/(\d{2})/(\d{2})(?!\d)", repl, text)
+
+
+def _apply_spec_prefs(events, cfg):
+    """Préférences d'affichage des specs — appliquées après collecte,
+    donc identiques quelle que soit la source (site, OA legacy, v2) :
+    - specs_show : clés autorisées à virgules (vide = toutes ; Date
+      est toujours conservée — requise pour le nommage)
+    - spec_overrides : « Clé = valeur »/ligne — remplace ou ajoute
+      la spec (le Lieu OA peut désigner le point de diffusion, pas
+      la salle : on le corrige ou on le masque globalement)
+    - spec_drops : fragments à virgules retirés des valeurs — les
+      specs sont des listes jointes par « · » : on enlève un item
+      sans perdre les autres (ex. « Boucle magnétique », commodité
+      du lieu plutôt qu'accessibilité de la séance)
+    Une clé forcée masquée par specs_show n'est pas ajoutée."""
+    if not cfg:
+        return
+    from .settings import parse_kv
+    shown = [t.strip() for t in
+             (cfg.get("specs_show") or "").split(",") if t.strip()]
+    show = set(shown) if shown else None
+    drops = {t.strip() for t in
+             (cfg.get("spec_drops") or "").split(",") if t.strip()}
+    over = parse_kv(cfg.get("spec_overrides") or "")
+    date_fmt = cfg.get("date_format") or "compact"
+    if show is None and not over and not drops and date_fmt == "compact":
+        return
+    for ev in events:
+        specs = dict(ev.get("specs") or {})
+        if show is not None:
+            specs = {k: v for k, v in specs.items()
+                     if k == "Date" or k in show}
+        for k, v in list(specs.items()):
+            if k == "Date" or not drops:
+                continue
+            kept = [p.strip() for p in v.split(" · ")
+                    if p.strip() and p.strip() not in drops]
+            if kept:
+                specs[k] = " · ".join(kept)
+            else:
+                del specs[k]  # tous les items masqués → spec omise
+        for k, v in over.items():
+            if v and (show is None or k in show or k == "Date"):
+                specs[k] = v
+        if date_fmt != "compact" and specs.get("Date"):
+            specs["Date"] = _reformat_date_spec(specs["Date"], date_fmt)
+        ev["specs"] = specs
 
 
 def generate(out_dir=None, max_events=0, pages=99, cfg=None, size=DEFAULT_SIZE):
@@ -135,7 +237,8 @@ def generate(out_dir=None, max_events=0, pages=99, cfg=None, size=DEFAULT_SIZE):
     if not use_oa:
         events = list_events(max_pages=pages, categories=cats)
         # une carte par séance sur le site → une diapo par événement
-        events = group_sessions(events)
+        events = group_sessions(
+            events, (cfg or {}).get("next_label"))
     events = _limit_events(events, cfg, max_events)
     print(f"  {len(events)} événements trouvés")
     if not events:
@@ -155,6 +258,12 @@ def generate(out_dir=None, max_events=0, pages=99, cfg=None, size=DEFAULT_SIZE):
                 lambda e: download_image(parse_detail(e, series_map)),
                 events))
         mark_series(events, series_map)
+
+    # après les pages de détail : Accessibilité/Public/specs de
+    # bannière n'existent pas encore au listing — appliquer ici pour
+    # que specs_show/spec_drops/spec_overrides couvrent toutes les
+    # specs, quelle que soit la source
+    _apply_spec_prefs(events, cfg)
 
     # métadonnées pour la « diapo du jour » de la webui
     import json
@@ -209,15 +318,19 @@ def generate(out_dir=None, max_events=0, pages=99, cfg=None, size=DEFAULT_SIZE):
                 pass
         (out / "manifest.txt").unlink(missing_ok=True)
     pngs = []
+    dm = (cfg or {}).get("desc_mode") or "auto"
+    dx = int((cfg or {}).get("desc_max", 400) or 0)
     if gen_landscape:
-        pngs = _render_set(events, fonts, out / "landscape", size)
+        pngs = _render_set(events, fonts, out / "landscape", size,
+                           desc_mode=dm, desc_max=dx)
     if gen_portrait:
         # portrait A4 (impression, 150-300 dpi) ou écran 9:16 (écran
         # pivoté) selon portrait_format — sous-dossier portrait/,
         # pas poussé par les synchros paysage par défaut
         fmt = (cfg or {}).get("portrait_format") or "a4"
         _render_set(events, fonts, out / "portrait",
-                    portrait_size(size, fmt), portrait_key(fmt))
+                    portrait_size(size, fmt), portrait_key(fmt),
+                    desc_mode=dm, desc_max=dx)
 
     # synchros : une destination en échec ne doit pas faire rater la
     # génération — les diapos locales sont bonnes, l'erreur part en

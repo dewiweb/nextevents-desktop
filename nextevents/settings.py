@@ -12,15 +12,26 @@ OUT_DIR = Path(os.environ.get("OUT_DIR", DEFAULT_OUT))
 SETTINGS_FILE = Path(os.environ.get("SETTINGS_FILE", OUT_DIR / "settings.json"))
 
 DEFAULTS = {
-    "interval_hours": 0,
+    "interval_hours": 0,    # legacy — converti en interval_min au chargement
+    "interval_min": 0,      # rafraîchissement auto en minutes (0 = off)
     "sched_times": "",
     "max_events": 0,
-    "limit_mode": "count",   # count | days | date
+    "limit_mode": "count",   # count | days | date | from | range
     "limit_days": 14,
-    "limit_date": "",        # ISO YYYY-MM-DD
+    "limit_date": "",        # ISO YYYY-MM-DD — borne haute (mode date)
+    "limit_from": "",        # ISO YYYY-MM-DD — borne basse (from | range)
+    "limit_to": "",          # ISO YYYY-MM-DD — borne haute (range)
     "oa_api_key": "",
     "oa_agenda": "leschampslibres",
     "data_source": "site",   # site | openagenda
+    # prefs d'affichage des specs (backport openagenda-slides)
+    "specs_show": "",        # clés affichées à virgules — vide = toutes
+    "spec_overrides": "",    # « Clé = valeur forcée »/ligne
+    "spec_drops": "",        # valeurs à retirer des specs, à virgules
+    "next_label": "Prochaine séance : ",  # préfixe récurrent (vide = off)
+    "date_format": "compact",  # compact JJ/MM/AA | noyear JJ/MM | short | long
+    "desc_mode": "auto",       # auto | chapeau | long — source de la description
+    "desc_max": 400,           # troncature de la description (0 = borne sûre 400)
     # séries éditoriales : « identifiant = Libellé » par ligne —
     # slug de page série du site ou keyword OpenAgenda
     "series_map":
@@ -68,6 +79,24 @@ DEFAULTS = {
     "ss_screen_p": -1,
 }
 
+DEFAULT_NEXT_LABEL = "Prochaine séance : "
+
+
+def parse_kv(text):
+    """« Clé = valeur » par ligne → dict (réglage spec_overrides).
+    Lignes vides/# ignorées."""
+    out = {}
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        k, v = k.strip(), v.strip()
+        if k:
+            out[k] = v
+    return out
+
+
 # état runtime du serveur (génération en cours, journal, dernier run)
 state = {"running": False, "last_run": None, "last_error": None, "log": []}
 lock = threading.Lock()
@@ -97,6 +126,26 @@ def load_settings():
                 pass
         else:
             out[k] = str(v)
+    # migration : fichier d'avant interval_min avec interval_hours
+    # renseigné → conversion en minutes (sans elle, la boucle ci-dessus
+    # ignore interval_min s'il n'est pas dans DEFAULTS, et l'ancien
+    # réglage en heures serait perdu)
+    if "interval_min" not in s and s.get("interval_hours"):
+        try:
+            out["interval_min"] = int(s["interval_hours"]) * 60
+        except (TypeError, ValueError):
+            pass
+    # migration : l'ancien libellé générique « Dispositifs d'écoute
+    # amplifiée » couvrait boucle/collier/casque et le mot-clé OA —
+    # remplacé par les libellés spécifiques, sinon un masquage
+    # existant cesserait de correspondre
+    drops = [t.strip() for t in out["spec_drops"].split(",") if t.strip()]
+    if "Dispositifs d'écoute amplifiée" in drops:
+        drops = [d for d in drops
+                 if d != "Dispositifs d'écoute amplifiée"] + [
+            "Écoute amplifiée", "Boucle magnétique",
+            "Collier magnétique", "Casque amplifié"]
+        out["spec_drops"] = ", ".join(drops)
     # secrets : env var puis trousseau OS priment sur le fichier ;
     # la valeur en clair du JSON reste le dernier repli
     for k in secrets.KEYS:
