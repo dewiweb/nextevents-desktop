@@ -18,7 +18,7 @@ Tout est local — aucun serveur web, aucun navigateur externe :
   (scraping leschampslibres.fr + OpenAgenda, rendu HTML→PNG, synchros
   FTP/SMB/local, planificateur, diapo du jour)
 - **`ui/`** — interface native **PySide6/Qt Widgets** : fenêtre à onglets
-  (Général, Destinations, Diapo du jour, Diaporama), galerie de vignettes
+  (Général, Destinations, Diapo du jour, Galerie), galerie de vignettes
   avec aperçu intégré — alimentée **au fil de la génération** (décodage
   en worker thread), journal en direct, barre de progression globale,
   raccourcis (`Ctrl+G` générer, `Ctrl+S` enregistrer, `F11` diaporama,
@@ -31,7 +31,11 @@ Tout est local — aucun serveur web, aucun navigateur externe :
   orientation (postes multi-sorties)
 - **Rendu** : Chromium *headless shell* embarqué (appairé au driver
   Playwright) — immunisé aux mises à jour de navigateur sur les postes.
-  Pour forcer un navigateur système : `NEXTEVENTS_BROWSER_CHANNEL=msedge`
+  Une sonde le lance en tâche de fond au démarrage : le bouton
+  « Générer » signale un blocage avéré plutôt qu'un faux
+  « Génération impossible » (l'échec est re-sondé — une installation
+  entre-temps est détectée). Pour forcer un navigateur système :
+  `NEXTEVENTS_BROWSER_CHANNEL=msedge`
 - **Tray** : `QSystemTrayIcon` natif (Win32 / SNI) — fermer la fenêtre
   réduit en icône, double-clic la réaffiche, menu complet (générer,
   diaporamas, dossier de destination, ouvrir les diapos, quitter)
@@ -76,8 +80,8 @@ interne — le rendu, le filtrage et la diapo du jour sont identiques.
   slugs du site) ; la sélection vide = aucun événement. Côté OA, le
   filtrage mappe les catégories OA (`_oa_cat`) sur les slugs site.
 - **Limiteur** (réglage « Affichage ») : cinq modes —
-  `Nombre max` (historique), `Dans les N jours`, `Jusqu'au <date>`,
-  `À partir du <date>` et `Du <début> au <fin>`.
+  `Premiers N événements` (historique), `Dans les N jours`,
+  `Jusqu'au <date>`, `À partir du <date>` et `Du <début> au <fin>`.
   Un événement est gardé si sa fenêtre [début, fin] intersecte
   celle du filtre — les expos en cours restent donc visibles.
 
@@ -95,12 +99,25 @@ Ordre fixe `SPEC_ORDER`, chaque ligne absente est omise :
 | **Accessibilité** | keywords OA `def*` ∪ mentions dans le texte |
 
 Réglage « Informations affichées » (Général) — chaque spec peut être
-**masquée** (case décochée) ou **forcée** à une valeur constante
+**masquée** (case décochée), **forcée** à une valeur constante
 (champ à droite : ex. `Lieu = Auditorium` si le champ lieu OA désigne
-autre chose). La Date reste toujours affichée — elle sert au nommage.
-Le préfixe des récurrents (« Prochaine séance : ») est éditable —
-vide = date seule. Appliqué après collecte : couvre indifféremment
-les trois sources (site, OA legacy, OA v2).
+autre chose) ou **expurgée** de valeurs précises (champ « à retirer »,
+à virgules : ex. `Casque amplifié` sort la mention d'une liste
+« a · b · c » sans perdre les autres). La Date reste toujours
+affichée ; le nommage des fichiers s'appuie sur la date interne de
+l'événement, pas sur le libellé — un `date_format` non-compact ne
+casse donc pas le tri chronologique. Le préfixe des récurrents
+(« Prochaine séance : ») est éditable — vide = date seule. Appliqué
+après collecte des pages de détail : couvre indifféremment les trois
+sources (site, OA legacy, OA v2), specs de bannière comprises.
+
+La **description** des diapos est configurable de même : source
+« automatique » (chapeau — comportement historique), « chapeau » ou
+« longue description », plus une borne en caractères. La coupe se
+fait en fin de phrase quand elle tient dans la fenêtre, sinon au
+dernier mot complet + « … » — jamais au milieu d'un mot — et le
+nombre de lignes est calculé par diapo (colonne moins titre et specs)
+pour que texte et gabarit restent d'accord sur les trois layouts.
 
 ### D'où viennent les horaires
 
@@ -212,7 +229,8 @@ Lancer `nextevents.exe` / l'AppImage → fenêtre principale :
 
 - **Général** — réglages (intervalle, nb d'événements, résolution,
   layouts), journal de génération. Le layout
-  portrait propose deux formats : **A4** (impression, 150-300 dpi)
+  portrait propose deux formats : **A4** (impression, 150-300 dpi —
+  carte blanche + liseré de catégorie, sobre en encre)
   ou **écran 9:16** (écran 16:9 monté en vertical / totem)
 - **Destinations** — dossier de sortie, copie miroir locale
   (disque / lecteur réseau), FTP/FTPS et SMB avec test de connexion.
@@ -228,13 +246,24 @@ Lancer `nextevents.exe` / l'AppImage → fenêtre principale :
   de sortie : « Paysage — landscape/ » et « Portrait — portrait/ ».
   Chacun a ses réglages de lecture (intervalle, transition, durée,
   lancement du player) ; barre d'actions commune (actualiser, ouvrir
-  le dossier, export `.zip`, suppression multi-sélection via Suppr /
-  clic droit — propage aux synchros)
+  le dossier, export `.zip`, **imprimer** la sélection ou toute
+  l'orientation — le dialogue permet l'export PDF). Par diapo :
+  aperçu au double-clic, clic droit pour régénérer une diapo seule
+  (avec les réglages courants), lancer le diaporama depuis elle,
+  ouvrir la fiche web de l'événement, ou supprimer — multi-sélection
+  via Suppr / clic droit, propagée aux synchros
 
 Fermer la fenêtre réduit l'app dans la zone de notification ; double-
 clic sur l'icône la réaffiche. Clic droit : Afficher / Générer
 maintenant / Diaporama paysage / Diaporama portrait / Dossier de
 destination… / Ouvrir les diapos / Quitter.
+
+Une **aide contextuelle** (bouton « ? » de l'en-tête, ou F1) ouvre
+une rubrique par onglet + raccourcis : le texte explique la démarche
+là où les infobulles décrivent le champ. Contenu dans
+`assets/help/*.html` (un fichier par rubrique, illustré de captures
+ciblées des groupes de l'interface au thème de l'app) — éditable
+sans environnement de dev.
 
 Le bouton **Générer** vérifie les réglages avant de partir : un
 blocage (aucun format coché…) l'arrête avec la liste des corrections,
