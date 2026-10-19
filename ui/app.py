@@ -146,6 +146,12 @@ def run(icon_path):
 
     threading.Thread(target=scheduler, daemon=True).start()
 
+    # sonde navigateur en tâche de fond : le premier launch peut être
+    # long (scan AV du profil temporaire sur poste géré) — le résultat
+    # est en cache quand l'utilisateur clique « Générer »
+    from nextevents import preflight
+    preflight.start_browser_probe()
+
     # premier lancement : aucun settings.json → assistant de
     # configuration par usages (écran, impression, envoi…).
     # « Passer » : reproposé au prochain démarrage, ou les défauts

@@ -7,12 +7,12 @@ import os
 import re
 import subprocess
 import tempfile
-import time
 from pathlib import Path
 from string import Template
 
 from PIL import Image
 
+from .browser import launch_browser
 from .paths import ASSET_DIR
 from .scrape import CARD_COLORS, SPEC_ICONS, SPEC_ORDER
 
@@ -121,9 +121,17 @@ def _md_inline(text):
 
 
 def truncate(text, limit=400):
+    """Coupe en fin de phrase si l'une se termine dans la seconde
+    moitié de la fenêtre, sinon au dernier mot complet + « … » —
+    jamais au milieu d'un mot ou d'une phrase."""
     if len(text) <= limit:
         return text
-    cut = text[:limit].rsplit(" ", 1)[0]
+    w = text[:limit]
+    for sep in (". ", "! ", "? ", "… "):
+        i = w.rfind(sep, int(limit * 0.4))
+        if i > 0:
+            return w[:i].rstrip(".,;:!?") + "…"
+    cut = w.rsplit(" ", 1)[0]
     return cut.rstrip(".,;:!?") + "…"
 
 
@@ -132,7 +140,25 @@ def asset_svg(name):
     return p.read_text(encoding="utf-8") if p.exists() else ""
 
 
-def slide_html(ev, idx, fonts, orientation="landscape"):
+def _desc_html(ev, mode, limit):
+    """Texte de la description selon le réglage desc_mode : « chapeau »
+    (texte court), « long » (description détaillée — le clamp CSS
+    borne l'affichage), « auto » (markdown/long si présent, chapeau
+    sinon — comportement historique)."""
+    if mode == "chapeau":
+        src = ev.get("desc") or ""
+    elif mode == "long":
+        src = (ev.get("desc_md") or ev.get("desc_long")
+               or ev.get("desc") or "")
+    else:
+        src = ev.get("desc_md") or ev.get("desc") or ""
+    # toujours tronquer côté texte : sans borne, le clamp CSS coupe
+    # au milieu d'un mot — 400 car. ≈ ce que la zone affiche
+    return _md_inline(truncate(src, limit or 400))
+
+
+def slide_html(ev, idx, fonts, orientation="landscape",
+               desc_mode="auto", desc_max=400):
     portrait = orientation.startswith("portrait")
     bg, dark = CARD_COLORS.get(ev.get("color"), CARD_COLORS[None])
     tag = ev.get("tag") or ev["specs"].get("Catégorie") or "Événement"
@@ -162,13 +188,20 @@ def slide_html(ev, idx, fonts, orientation="landscape"):
             + (f'<div class="credit">{credit}</div>' if credit else "")
         )
     else:
-        media = f"""<div class="photo photo--empty" style="background:{dark}">
+        # impression A4 : inversion du bloc foncé (encre) — fond blanc,
+        # cercles clairs ; les autres formats gardent le bloc foncé
+        # à cercles blancs
+        if orientation == "portrait":
+            ph_bg, ph_c1, ph_c2, ph_o1, ph_o2 = "#fff", bg, dark, ".6", ".3"
+        else:
+            ph_bg, ph_c1, ph_c2, ph_o1, ph_o2 = dark, "#fff", dark, ".42", ".55"
+        media = f"""<div class="photo photo--empty" style="background:{ph_bg}">
 <svg viewBox="0 0 780 970" preserveAspectRatio="xMidYMid slice">
- <g fill="none" stroke="rgba(255,255,255,.42)" stroke-width="86">
+ <g fill="none" stroke="{ph_c1}" stroke-width="86" opacity="{ph_o1}">
   <circle cx="-60" cy="1030" r="340"/><circle cx="-60" cy="1030" r="560"/>
   <circle cx="-60" cy="1030" r="780"/>
  </g>
- <g fill="none" stroke="{dark}" stroke-width="60" opacity=".55">
+ <g fill="none" stroke="{ph_c2}" stroke-width="60" opacity="{ph_o2}">
   <circle cx="850" cy="-40" r="260"/><circle cx="850" cy="-40" r="440"/>
  </g>
 </svg>
@@ -186,8 +219,7 @@ def slide_html(ev, idx, fonts, orientation="landscape"):
         title=html.escape(ev["title"]),
         # desc_md : markdown interprété (gras/italique) ; desc plat en
         # repli (chemin site — pas de markdown de toute façon)
-        desc=_md_inline(truncate(ev.get("desc_md")
-                                 or ev.get("desc", ""))),
+        desc=_desc_html(ev, desc_mode, desc_max),
         specs_cls=specs_cls,
         specs_html=specs_html,
         logo_mark=asset_svg("logo-mark.svg"),
@@ -282,30 +314,8 @@ def render_all(slides, size=DEFAULT_SIZE, orientation="landscape"):
         return
 
     with sync_playwright() as p:
-        # NEXTEVENTS_BROWSER_CHANNEL permet d'utiliser un navigateur
-        # système (ex. "msedge" pour l'app desktop — pas de téléchargement)
-        channel = os.environ.get("NEXTEVENTS_BROWSER_CHANNEL")
-        # Sur poste géré, le launch peut échouer de façon transitoire
-        # (AV qui scanne le profil temporaire, Edge en maj…) : on retente,
-        # puis on bascule en fenêtré si le headless reste bloqué.
-        browser = None
-        # backoff long : une maj Edge ou un scan AV peut bloquer le
-        # lancement pendant une minute — on étale les tentatives
-        waits = [0, 5, 15, 30]
-        attempts = [(channel, True)] * len(waits) + \
-            ([(channel, False)] if channel else [])
-        for i, (ch, headless) in enumerate(attempts):
-            if i:
-                time.sleep(waits[min(i, len(waits) - 1)])
-            try:
-                kw = {"headless": headless}
-                if ch:
-                    kw["channel"] = ch
-                browser = p.chromium.launch(**kw)
-                break
-            except Exception as e:
-                print(f"  ✗ lancement navigateur ({ch or 'chromium'}, "
-                      f"headless={headless}) : {type(e).__name__}")
+        # retries partagés avec la sonde pré-flight (browser.launch_browser)
+        browser = launch_browser(p)
         if browser is None:
             raise RuntimeError("impossible de lancer le navigateur de rendu")
         page = browser.new_page(

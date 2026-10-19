@@ -16,9 +16,11 @@ DEFAULTS = {
     "interval_min": 0,      # rafraîchissement auto en minutes (0 = off)
     "sched_times": "",
     "max_events": 0,
-    "limit_mode": "count",   # count | days | date
+    "limit_mode": "count",   # count | days | date | from | range
     "limit_days": 14,
-    "limit_date": "",        # ISO YYYY-MM-DD
+    "limit_date": "",        # ISO YYYY-MM-DD — borne haute (mode date)
+    "limit_from": "",        # ISO YYYY-MM-DD — borne basse (from | range)
+    "limit_to": "",          # ISO YYYY-MM-DD — borne haute (range)
     "oa_api_key": "",
     "oa_agenda": "leschampslibres",
     "data_source": "site",   # site | openagenda
@@ -27,6 +29,9 @@ DEFAULTS = {
     "spec_overrides": "",    # « Clé = valeur forcée »/ligne
     "spec_drops": "",        # valeurs à retirer des specs, à virgules
     "next_label": "Prochaine séance : ",  # préfixe récurrent (vide = off)
+    "date_format": "compact",  # compact JJ/MM/AA | noyear JJ/MM | short | long
+    "desc_mode": "auto",       # auto | chapeau | long — source de la description
+    "desc_max": 400,           # troncature de la description (0 = pas de limite)
     # séries éditoriales : « identifiant = Libellé » par ligne —
     # slug de page série du site ou keyword OpenAgenda
     "series_map":
@@ -130,6 +135,17 @@ def load_settings():
             out["interval_min"] = int(s["interval_hours"]) * 60
         except (TypeError, ValueError):
             pass
+    # migration : l'ancien libellé générique « Dispositifs d'écoute
+    # amplifiée » couvrait boucle/collier/casque et le mot-clé OA —
+    # remplacé par les libellés spécifiques, sinon un masquage
+    # existant cesserait de correspondre
+    drops = [t.strip() for t in out["spec_drops"].split(",") if t.strip()]
+    if "Dispositifs d'écoute amplifiée" in drops:
+        drops = [d for d in drops
+                 if d != "Dispositifs d'écoute amplifiée"] + [
+            "Écoute amplifiée", "Boucle magnétique",
+            "Collier magnétique", "Casque amplifié"]
+        out["spec_drops"] = ", ".join(drops)
     # secrets : env var puis trousseau OS priment sur le fichier ;
     # la valeur en clair du JSON reste le dernier repli
     for k in secrets.KEYS:

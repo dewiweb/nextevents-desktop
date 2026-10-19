@@ -64,6 +64,28 @@
 
 @import "slide_base.css";
 
+/* ---------- Impression : palette allégée en encre --------------------------
+   Une carte pastel pleine page consomme toute la cartouche — le fond
+   passe au blanc du papier ; le reste suit la charte commune :
+   filigranes aux mêmes emplacements, dans la teinte foncée de la
+   catégorie à faible opacité ($bg pur serait invisible sur blanc
+   pour les catégories pâles, ex. le gris #efeae6). Tour noir 1px de
+   délimitation + liseré de catégorie à l'intérieur. */
+.card {
+    background: #fff;
+    border: 1px solid $ink;
+    box-shadow: inset 0 0 0 4px $bg;
+}
+
+.watermark {
+    color: $dark;
+    opacity: .3;
+}
+
+/* pastille blanche par défaut : sur le placeholder clair (sans image)
+   elle disparaîtrait — un liseré discret la découpe */
+.tag { border: 2px solid rgba(20, 20, 20, .12); }
+
 /* ---------- Composition portrait : visuel au-dessus ----------------------- */
 
 .photo-block { position: relative; flex: 0 0 780px; }

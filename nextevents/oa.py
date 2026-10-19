@@ -56,7 +56,8 @@ SERIES_KEYWORDS = {"grandstemoins": "Les grands témoins"}
 # mots-clés OA « déficiences » → mention d'accessibilité actionnable
 ACCESS_KEYWORDS = {
     "defautidif_lsf": "Interprétation en LSF",
-    "defauditif_amp": "Dispositifs d'écoute amplifiée",
+    # le mot-clé OA ne précise pas le dispositif → libellé générique
+    "defauditif_amp": "Écoute amplifiée",
     "defvisuel": "Audiodescription",
 }
 
@@ -230,6 +231,12 @@ def _base_map(e, cat_value, cat_label, public_label, kws, cond, timings,
     for lbl in (_extract_access(desc_long) or "").split("\n"):
         if lbl and lbl not in access_labels:
             access_labels.append(lbl)
+    # « Écoute amplifiée » (mot-clé générique) redondante quand le
+    # texte nomme le dispositif précis
+    if "Écoute amplifiée" in access_labels and {
+            "Boucle magnétique", "Collier magnétique",
+            "Casque amplifié"} & set(access_labels):
+        access_labels.remove("Écoute amplifiée")
     access = "\n".join(access_labels)
     if access:
         specs["Accessibilité"] = access.replace("\n", " · ")

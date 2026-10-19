@@ -50,17 +50,20 @@ class GeneralTabMixin:
             "des virgules — cumulables avec l'intervalle. Les diapos "
             "sont aussi à jour dès l'ouverture du poste si « Lancer "
             "l'application à l'ouverture de session » est coché.")
-        # limitation des diapos : nombre, horizon en jours, ou date
+        # limitation des diapos : nombre, horizon en jours, ou dates
         self.limit_mode = QComboBox()
         self.limit_mode.setFixedWidth(190)
         self.limit_mode.setToolTip(
             "Quelles diapos produire : les N premiers événements à "
             "venir, tout ce qui a lieu dans les N prochains jours, "
-            "ou tout jusqu'à une date. Un événement en cours "
-            "(expo permanente…) reste affiché.")
+            "jusqu'à une date, à partir d'une date ou entre deux "
+            "dates. Un événement en cours (expo permanente…) reste "
+            "affiché.")
         self.limit_mode.addItem("Premiers N événements", "count")
         self.limit_mode.addItem("Dans les N jours", "days")
         self.limit_mode.addItem("Jusqu'au …", "date")
+        self.limit_mode.addItem("À partir du …", "from")
+        self.limit_mode.addItem("Du … au …", "range")
         self._limit_stack = QStackedWidget()
         self.maxev = QSpinBox(minimum=0, maximum=999,
                               suffix=" (0 = tous)")
@@ -81,9 +84,44 @@ class GeneralTabMixin:
         self.limit_date.setDate(
             QDate.currentDate().addDays(30))
         self.limit_date.setMinimumDate(QDate.currentDate())
+        self.limit_from = QDateEdit(calendarPopup=True)
+        self.limit_from.setToolTip(
+            "Inclut les événements à partir de cette date (incluse) "
+            "— sans borne de fin.")
+        self.limit_from.setFixedWidth(160)
+        self.limit_from.setDate(QDate.currentDate())
+        # plage « du … au … » : deux dates côte à côte ; la borne de
+        # début est le même réglage que « À partir du » — les widgets
+        # sont synchronisés (setDate n'émet dateChanged que sur
+        # changement réel → pas de récursion)
+        self.range_from = QDateEdit(calendarPopup=True)
+        self.range_from.setFixedWidth(140)
+        self.range_from.setDate(QDate.currentDate())
+        self.range_from.setToolTip(
+            "Inclut les événements à partir de cette date (incluse).")
+        self.range_to = QDateEdit(calendarPopup=True)
+        self.range_to.setFixedWidth(140)
+        self.range_to.setDate(QDate.currentDate().addDays(30))
+        self.range_to.setToolTip(
+            "Inclut les événements jusqu'à cette date (incluse).")
+        range_w = QWidget()
+        rl = QHBoxLayout(range_w)
+        rl.setContentsMargins(0, 0, 0, 0)
+        rl.addWidget(self.range_from)
+        rl.addWidget(QLabel("→"))
+        rl.addWidget(self.range_to)
+        rl.addStretch(1)
+        self.limit_from.dateChanged.connect(self.range_from.setDate)
+        self.range_from.dateChanged.connect(self.limit_from.setDate)
+        # la fin ne peut pas précéder le début : choisir un début
+        # ultérieur à la fin la fait avancer
+        self.range_from.dateChanged.connect(
+            self.range_to.setMinimumDate)
         self._limit_stack.addWidget(self.maxev)
         self._limit_stack.addWidget(self.limit_days)
         self._limit_stack.addWidget(self.limit_date)
+        self._limit_stack.addWidget(self.limit_from)
+        self._limit_stack.addWidget(range_w)
         self.limit_mode.currentIndexChanged.connect(
             self._limit_stack.setCurrentIndex)
         row = QHBoxLayout()
@@ -170,7 +208,7 @@ class GeneralTabMixin:
             self._spec_rows[key] = (cb, ov)
         self.spec_drops = QLineEdit()
         self.spec_drops.setPlaceholderText(
-            "Dispositifs d'écoute amplifiée, …")
+            "Boucle magnétique, Casque amplifié, …")
         self.spec_drops.setToolTip(
             "Valeurs à retirer des specs, séparées par des virgules — "
             "un item est enlevé d'une liste « a · b · c » sans perdre "
@@ -182,6 +220,40 @@ class GeneralTabMixin:
             "Préfixe de la spec Date pour les événements à plusieurs "
             "séances — vide = afficher la date seule")
         f.addRow("Préfixe récurrent", self.next_label)
+        self.date_fmt = QComboBox()
+        self.date_fmt.setFixedWidth(190)
+        self.date_fmt.setToolTip(
+            "Format de la spec « Date » — l'heure et les structures "
+            "« Du … au … » / préfixe récurrent sont préservés.")
+        self.date_fmt.addItem("15/11/26", "compact")
+        self.date_fmt.addItem("15/11 (sans année)", "noyear")
+        self.date_fmt.addItem("sam. 15 nov.", "short")
+        self.date_fmt.addItem("samedi 15 novembre", "long")
+        f.addRow("Format de date", self.date_fmt)
+        self.desc_mode = QComboBox()
+        self.desc_mode.setFixedWidth(190)
+        self.desc_mode.setToolTip(
+            "Texte de la description sur la diapo : le chapeau "
+            "(court), la description détaillée, ou automatique "
+            "(détaillée si présente, chapeau sinon). Le nombre de "
+            "lignes est borné par le gabarit ; 0 car. = pas de "
+            "troncature.")
+        self.desc_mode.addItem("Automatique", "auto")
+        self.desc_mode.addItem("Chapeau seul", "chapeau")
+        self.desc_mode.addItem("Longue description", "long")
+        self.desc_max = QSpinBox(minimum=0, maximum=5000, value=400,
+                                 suffix=" car.")
+        self.desc_max.setFixedWidth(160)
+        self.desc_max.setToolTip(
+            "Troncature de la description en caractères — la coupe se "
+            "fait en fin de phrase, jamais au milieu d'un mot. "
+            "0 = borne sûre par défaut (400 car. ≈ ce que la zone "
+            "affiche).")
+        drow = QHBoxLayout()
+        drow.addWidget(self.desc_mode)
+        drow.addWidget(self.desc_max)
+        drow.addStretch(1)
+        f.addRow("Description", drow)
         lay.addWidget(sp)
 
         sers = QGroupBox("Séries éditoriales — identifiant = Libellé "

@@ -75,10 +75,11 @@ interne — le rendu, le filtrage et la diapo du jour sont identiques.
 - **Catégories** : cases à cocher par catégorie du programme (les 10
   slugs du site) ; la sélection vide = aucun événement. Côté OA, le
   filtrage mappe les catégories OA (`_oa_cat`) sur les slugs site.
-- **Limiteur** (réglage « Affichage ») : trois modes —
-  `Nombre max` (historique), `Dans les N jours`, `Jusqu'au <date>`.
+- **Limiteur** (réglage « Affichage ») : cinq modes —
+  `Nombre max` (historique), `Dans les N jours`, `Jusqu'au <date>`,
+  `À partir du <date>` et `Du <début> au <fin>`.
   Un événement est gardé si sa fenêtre [début, fin] intersecte
-  [aujourd'hui, horizon] — les expos en cours restent donc visibles.
+  celle du filtre — les expos en cours restent donc visibles.
 
 ## Specs affichées sur les diapos
 
@@ -86,7 +87,7 @@ Ordre fixe `SPEC_ORDER`, chaque ligne absente est omise :
 
 | Spec | Contenu / règles |
 |---|---|
-| **Date** | `JJ/MM/AA à HHh` (séance unique) · `Du … au …` (multi-jours) · `Prochaine séance : …` (récurrent, > 1 séance à venir) · `Exposition permanente` |
+| **Date** | `JJ/MM/AA à HHh` (séance unique) · `Du … au …` (multi-jours) · `Prochaine séance : …` (récurrent, > 1 séance à venir) · `Exposition permanente` — format de la date configurable : `JJ/MM/AA` (défaut), `JJ/MM`, `sam. 15 nov.`, `samedi 15 novembre` |
 | **Durée** | `1h30` — masquée si ≥ 4 h (plage d'ouverture, pas une séance) |
 | **Lieu** | omis pour les « Temps fort » multi-sites |
 | **Tarif** | texte OA `conditions` ou carte site |

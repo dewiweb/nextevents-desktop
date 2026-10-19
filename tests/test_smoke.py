@@ -323,6 +323,248 @@ class PreflightTest(unittest.TestCase):
         self.assertTrue(any("6h00" in i.msg for i in issues))
 
 
+class LimitEventsTest(unittest.TestCase):
+    """_limit_events : modes « à partir du » et « du … au … » —
+    un événement est gardé si sa fenêtre [début, fin] intersecte
+    celle du filtre."""
+
+    @staticmethod
+    def _ev(start, end=None):
+        t = lambda s: tuple(int(x) for x in s.split("-"))
+        ev = {"_dt": t(start)}
+        if end:
+            ev["_dt_end"] = t(end)
+        return ev
+
+    @staticmethod
+    def _d(days):
+        import datetime
+        return (datetime.date.today()
+                + datetime.timedelta(days=days)).isoformat()
+
+    def test_from(self):
+        """Borne basse seule : passé terminé exclu, en cours (chevauche
+        la borne) et futur gardés — sans borne haute."""
+        from nextevents.generate import _limit_events
+        evs = [self._ev(self._d(-10)), self._ev(self._d(-10),
+               self._d(10)), self._ev(self._d(10))]
+        out = _limit_events(evs, {"limit_mode": "from",
+                                  "limit_from": self._d(0)}, 0)
+        self.assertEqual(out, evs[1:])
+
+    def test_range(self):
+        """Plage [+5, +15] : gardés uniquement les événements dont la
+        fenêtre la touche — y compris ceux qui la chevauchent."""
+        from nextevents.generate import _limit_events
+        evs = [self._ev(self._d(0)), self._ev(self._d(5)),
+               self._ev(self._d(20)), self._ev(self._d(1), self._d(20)),
+               self._ev(self._d(-10), self._d(10))]
+        out = _limit_events(evs, {"limit_mode": "range",
+                                  "limit_from": self._d(5),
+                                  "limit_to": self._d(15)}, 0)
+        self.assertEqual(out, [evs[1], evs[3], evs[4]])
+
+    def test_range_inverted_swapped(self):
+        """Bornes inversées dans les réglages → réordonnées au
+        filtrage plutôt qu'une liste vide."""
+        from nextevents.generate import _limit_events
+        evs = [self._ev(self._d(0)), self._ev(self._d(10))]
+        out = _limit_events(evs, {"limit_mode": "range",
+                                  "limit_from": self._d(15),
+                                  "limit_to": self._d(5)}, 0)
+        self.assertEqual(out, [evs[1]])
+
+    def test_missing_bound_no_filter(self):
+        """Date absente/invalide → pas de filtre (même repli que
+        limit_date vide), pas une liste vide."""
+        from nextevents.generate import _limit_events
+        evs = [self._ev(self._d(-10)), self._ev(self._d(30))]
+        for cfg in ({"limit_mode": "from"},
+                    {"limit_mode": "range", "limit_from": self._d(5)},
+                    {"limit_mode": "range", "limit_to": self._d(5)},
+                    {"limit_mode": "range", "limit_from": "n/a",
+                     "limit_to": self._d(5)}):
+            self.assertEqual(_limit_events(evs, cfg, 0), evs)
+
+
+class DateFormatTest(unittest.TestCase):
+    """date_format reformate les tokens JJ/MM/AA de la spec Date —
+    l'heure, « Du … au … » et le préfixe récurrent sont préservés
+    (valable pour les deux sources : site et OpenAgenda)."""
+
+    @staticmethod
+    def _spec(text, fmt):
+        from nextevents.generate import _apply_spec_prefs
+        ev = {"specs": {"Date": text}}
+        _apply_spec_prefs([ev], {"date_format": fmt})
+        return ev["specs"]["Date"]
+
+    def test_short(self):
+        # 15/11/26 = dimanche
+        self.assertEqual(self._spec("15/11/26 à 14h30", "short"),
+                         "dim. 15 nov. à 14h30")
+
+    def test_long(self):
+        self.assertEqual(self._spec("15/11/26 à 14h30", "long"),
+                         "dimanche 15 novembre à 14h30")
+
+    def test_structures_preserved(self):
+        self.assertEqual(self._spec("Du 03/10/26 au 12/10/26", "noyear"),
+                         "Du 03/10 au 12/10")
+        self.assertEqual(
+            self._spec("Prochaine séance : 15/11/26 à 14h", "short"),
+            "Prochaine séance : dim. 15 nov. à 14h")
+
+    def test_without_token_and_compact_untouched(self):
+        self.assertEqual(self._spec("Exposition permanente", "short"),
+                         "Exposition permanente")
+        self.assertEqual(self._spec("15/11/26 à 14h30", "compact"),
+                         "15/11/26 à 14h30")
+
+
+class DescModeTest(unittest.TestCase):
+    """desc_mode choisit la source de la description ; desc_max borne
+    le nombre de caractères."""
+
+    @staticmethod
+    def _html(mode, limit=400):
+        from nextevents.slide import slide_html
+        ev = {"title": "T", "tag": "X", "color": None,
+              "desc": "CHAPEAU", "desc_long": "TEXTE LONG DÉTAILLÉ",
+              "specs": {"Date": "01/01/26"}}
+        return slide_html(ev, 0, {"regular": "", "medium": ""},
+                          desc_mode=mode, desc_max=limit)
+
+    def test_modes(self):
+        self.assertIn("CHAPEAU", self._html("auto"))
+        self.assertNotIn("TEXTE LONG", self._html("chapeau"))
+        self.assertIn("TEXTE LONG", self._html("long"))
+
+    def test_limit(self):
+        self.assertNotIn("TEXTE LONG", self._html("long", 10))
+
+
+class AccessLabelsTest(unittest.TestCase):
+    """Mentions d'écoute amplifiée : le libellé nomme le dispositif
+    détecté dans le texte — le terme générique n'est plus utilisé
+    quand la donnée source est précise."""
+
+    def test_device_specific_labels(self):
+        from nextevents.scrape import _extract_access
+        self.assertEqual(
+            _extract_access("Une boucle magnétique équipe la salle."),
+            "Boucle magnétique")
+        self.assertEqual(
+            _extract_access("Casque d'amplification et collier "
+                            "magnétique à l'accueil."),
+            "Collier magnétique\nCasque amplifié")
+
+    def test_generic_oa_label(self):
+        from nextevents.oa import ACCESS_KEYWORDS
+        self.assertEqual(
+            ACCESS_KEYWORDS["defauditif_amp"], "Écoute amplifiée")
+
+    def test_spec_drops_old_label_migrates(self):
+        """Réglages antérieurs : « Dispositifs d'écoute amplifiée »
+        dans spec_drops couvrait tous les dispositifs → migré vers
+        les libellés spécifiques (le masquage serait perdu sinon)."""
+        import json as _json
+        prev = (st.SETTINGS_FILE.read_text()
+                if st.SETTINGS_FILE.exists() else None)
+        try:
+            st.SETTINGS_FILE.write_text(_json.dumps({
+                "spec_drops":
+                "Surtitrage, Dispositifs d'écoute amplifiée"}))
+            out = st.load_settings()["spec_drops"]
+        finally:
+            if prev is None:
+                st.SETTINGS_FILE.unlink(missing_ok=True)
+            else:
+                st.SETTINGS_FILE.write_text(prev)
+        self.assertIn("Surtitrage", out)
+        self.assertNotIn("Dispositifs", out)
+        for lbl in ("Écoute amplifiée", "Boucle magnétique",
+                    "Collier magnétique", "Casque amplifié"):
+            self.assertIn(lbl, out)
+
+
+class BrowserLaunchTest(unittest.TestCase):
+    """launch_browser est partagé entre la sonde pré-flight et le
+    rendu : une sonde plus stricte que le rendu bloquerait des
+    générations qui iraient au bout (régression constatée sur poste
+    Windows géré — premier launch tué par le scan AV)."""
+
+    @staticmethod
+    def _fake_playwright(fail=0):
+        """Faux module playwright : launch() échoue `fail` fois puis
+        réussit. Renvoie (playwright, appels)."""
+        calls = []
+
+        class Chromium:
+            def launch(self, **kw):
+                calls.append(kw)
+                if len(calls) <= fail:
+                    raise RuntimeError("launch transitoire")
+                return object()
+
+        class P:
+            chromium = Chromium()
+
+        return P(), calls
+
+    def test_retries_then_success(self):
+        """Des échecs transitoires suivis d'un succès → la sonde (et
+        le rendu) obtiennent un navigateur."""
+        from nextevents import browser
+        p, calls = self._fake_playwright(fail=2)
+        b = browser.launch_browser(p, log=lambda m: None, waits=(0, 0, 0))
+        self.assertIsNotNone(b)
+        self.assertEqual(len(calls), 3)
+
+    def test_all_fail_returns_none(self):
+        """Toutes les tentatives en échec → None : le pré-flight
+        remonte un blocker, comme le rendu lèverait RuntimeError."""
+        from nextevents import browser
+        os.environ.pop("NEXTEVENTS_BROWSER_CHANNEL", None)
+        p, calls = self._fake_playwright(fail=99)
+        b = browser.launch_browser(
+            p, log=lambda m: None, waits=(0, 0, 0, 0))
+        self.assertIsNone(b)
+        self.assertEqual(len(calls), 4)
+        self.assertTrue(all(kw["headless"] for kw in calls))
+
+    def test_headed_fallback_when_channel(self):
+        """Avec un navigateur système (NEXTEVENTS_BROWSER_CHANNEL) :
+        repli en fenêtré quand le headless reste en échec."""
+        from nextevents import browser
+        old = os.environ.get("NEXTEVENTS_BROWSER_CHANNEL")
+        os.environ["NEXTEVENTS_BROWSER_CHANNEL"] = "msedge"
+        try:
+            calls = []
+
+            class Chromium:
+                def launch(self, **kw):
+                    calls.append(kw)
+                    if kw["headless"]:
+                        raise RuntimeError("headless bloqué")
+                    return object()
+
+            class P:
+                chromium = Chromium()
+
+            b = browser.launch_browser(
+                p=P(), log=lambda m: None, waits=(0, 0))
+            self.assertIsNotNone(b)
+            self.assertEqual(len(calls), 3)
+            self.assertEqual(calls[-1],
+                             {"headless": False, "channel": "msedge"})
+        finally:
+            if old is None:
+                os.environ.pop("NEXTEVENTS_BROWSER_CHANNEL", None)
+            else:
+                os.environ["NEXTEVENTS_BROWSER_CHANNEL"] = old
+
+
 class WizardTest(unittest.TestCase):
 
     def test_presets_and_apply(self):
@@ -412,6 +654,26 @@ class SlideTemplateTest(unittest.TestCase):
             self.assertIn(orient, DESIGNS)
         # la base CSS existe et tient lieu de charte commune
         self.assertTrue((ASSET_DIR / "slide_base.css").exists())
+
+    def test_a4_print_ink_light(self):
+        """A4 = impression : la carte reste blanche (un pastel pleine
+        page consommait l'encre de toute la diapo) — la couleur de
+        catégorie ne subsiste qu'en liseré/filigrane, et le
+        placeholder « sans image » est clair lui aussi."""
+        from nextevents.paths import ASSET_DIR
+        from nextevents.slide import slide_html
+        src = (ASSET_DIR / "slide_template_portrait.html").read_text(
+            "utf-8")
+        self.assertIn("background: #fff", src)
+        self.assertIn("$ink", src)         # tour noir de délimitation
+        ev = {"title": "Expo", "tag": "Expo", "desc": "",
+              "color": None, "specs": {"Date": "01/01/26"}}
+        h = slide_html(ev, 0, {"regular": "", "medium": ""},
+                       orientation="portrait")
+        self.assertIn('style="background:#fff"', h)   # pas de bloc foncé
+        h = slide_html(ev, 0, {"regular": "", "medium": ""},
+                       orientation="landscape")
+        self.assertIn('style="background:#bfbbb8"', h)  # foncé ailleurs
 
 
 if __name__ == "__main__":

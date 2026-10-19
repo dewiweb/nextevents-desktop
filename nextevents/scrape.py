@@ -436,9 +436,13 @@ _ACCESS_PATTERNS = [
     (re.compile(r"audiodescri\w*|audio-description", re.I),
      "Audiodescription"),
     (re.compile(r"surtitr", re.I), "Surtitrage"),
-    (re.compile(r"boucle magn[ée]tique|collier magn[ée]tique"
-               r"|casque d'amplification", re.I),
-     "Dispositifs d'écoute amplifiée"),
+    # chaque dispositif détecté est nommé — pas de terme générique
+    # quand la donnée source précise lequel est disponible
+    (re.compile(r"boucle magn[ée]tique|boucle [àa] induction", re.I),
+     "Boucle magnétique"),
+    (re.compile(r"collier magn[ée]tique", re.I), "Collier magnétique"),
+    (re.compile(r"casque d'amplification|casque amplifi", re.I),
+     "Casque amplifié"),
 ]
 
 

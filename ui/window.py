@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QPushButton, QTabWidget, QVBoxLayout, QWidget,
 )
 
-from nextevents.runner import run_generation, slides
+from nextevents.runner import run_generation, slides, slides_portrait
 from nextevents.settings import (
     load_settings, save_settings, state, parse_kv,
     DEFAULT_NEXT_LABEL,
@@ -228,6 +228,10 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
             limit_mode=self.limit_mode.currentData(),
             limit_days=self.limit_days.value(),
             limit_date=self.limit_date.date().toString("yyyy-MM-dd"),
+            # borne de début partagée par « À partir du » et
+            # « Du … au … » — widgets synchronisés, on lit l'un
+            limit_from=self.limit_from.date().toString("yyyy-MM-dd"),
+            limit_to=self.range_to.date().toString("yyyy-MM-dd"),
             resolution=self.res.currentData(),
             gen_landscape=int(self.gen_ls.isChecked()),
             gen_portrait=int(self.gen_pt.isChecked()),
@@ -242,6 +246,9 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
                 if ov.text().strip()),
             spec_drops=self.spec_drops.text().strip(),
             next_label=self.next_label.text(),
+            date_format=self.date_fmt.currentData(),
+            desc_mode=self.desc_mode.currentData(),
+            desc_max=self.desc_max.value(),
             ftp_host=self.ftp_host.text().strip(),
             ftp_port=self.ftp_port.value(),
             ftp_path=self.ftp_path.text().strip(),
@@ -375,6 +382,11 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
             s.get("next_label", DEFAULT_NEXT_LABEL))
         self.next_label.setPlaceholderText(DEFAULT_NEXT_LABEL)
         self.spec_drops.setText(s.get("spec_drops") or "")
+        i = self.date_fmt.findData(s.get("date_format") or "compact")
+        self.date_fmt.setCurrentIndex(max(i, 0))
+        i = self.desc_mode.findData(s.get("desc_mode") or "auto")
+        self.desc_mode.setCurrentIndex(max(i, 0))
+        self.desc_max.setValue(int(s.get("desc_max") or 0))
         self.maxev.setValue(s["max_events"])
         i = self.limit_mode.findData(s.get("limit_mode") or "count")
         self.limit_mode.setCurrentIndex(max(i, 0))
@@ -382,6 +394,11 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
         try:
             self.limit_date.setDate(
                 QDate.fromString(s.get("limit_date") or "", "yyyy-MM-dd"))
+            # limit_from alimente aussi range_from (widgets liés)
+            self.limit_from.setDate(
+                QDate.fromString(s.get("limit_from") or "", "yyyy-MM-dd"))
+            self.range_to.setDate(
+                QDate.fromString(s.get("limit_to") or "", "yyyy-MM-dd"))
         except Exception:
             pass
         self.res.setCurrentIndex(
@@ -518,7 +535,9 @@ class MainWindow(GeneralTabMixin, DestinationsTabMixin, GalleryTabMixin,
         self._io_tick += 1
         if self._io_tick >= 10 or was != running:
             self._io_tick = 0
-            self._n_slides = len(slides())
+            # diapos paysage + portrait — une génération portrait-only
+            # laissait le compteur à 0
+            self._n_slides = len(slides()) + len(slides_portrait())
             s = load_settings()
             from nextevents.runner import _interval_min
             self._sched_interval = _interval_min(s)

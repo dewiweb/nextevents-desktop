@@ -7,8 +7,9 @@ Un `blocker` empêche le run, un `warn` est listé mais contournable.
 """
 
 import importlib.util
-import os
 import re
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -77,10 +78,10 @@ def validate_settings(s):
     # rendu : le module playwright peut être présent sans ses
     # binaires (« playwright install » pas fait) — executable_path
     # pointe le chrome complet alors que le headless utilise
-    # chrome-headless-shell : seule sonde fiable, un vrai lancement.
-    # Résultat mis en cache : un succès ne sera pas invalidé en cours
-    # de session ; un échec est re-tenté (l'utilisateur a peut-être
-    # installé entre-temps).
+    # chrome-headless-shell : seule sonde fiable, un vrai lancement
+    # avec les mêmes retries que render_all. Résultat mis en cache :
+    # un succès ne sera pas invalidé en cours de session ; un échec
+    # est re-tenté (l'utilisateur a peut-être installé entre-temps).
     if importlib.util.find_spec("playwright") is None:
         # repli firefox headless prévu par render_all — warn, pas blocker
         out.append(Issue(
@@ -97,24 +98,65 @@ def validate_settings(s):
     return out
 
 
+# sonde navigateur : None = jamais sondée, True = OK pour la session,
+# timestamp = dernier échec — re-sondée après _PROBE_RETRY_S, pas à
+# chaque appel : un cycle de retry complet peut durer ~1 min sur
+# poste géré, et les échecs y sont souvent transitoires
 _browser_probe = None
+_probe_lock = threading.Lock()
+_PROBE_RETRY_S = 60
+
+
+def start_browser_probe():
+    """Lance la sonde en tâche de fond (démarrage de l'app) : un
+    premier launch peut être long (scan AV du profil temporaire) —
+    le résultat est en cache quand l'utilisateur clique « Générer »."""
+    threading.Thread(target=_browser_ok, daemon=True).start()
 
 
 def _browser_ok():
-    """Tente un lancement chromium headless (comme render_all) —
-    ~300 ms la première fois, résultat ensuite mis en cache tant
-    qu'il est positif."""
+    """Vrai lancement chromium via la même stratégie de retry que
+    render_all — une sonde plus stricte que le rendu bloquerait des
+    générations qui iraient au bout. La sonde tourne dans un thread
+    dédié : le rendu s'exécute hors thread principal, elle doit voir
+    le même contexte (boucle/politique asyncio sous Windows) pour
+    être un prédicteur fidèle."""
     global _browser_probe
-    if _browser_probe is True:
-        return True
-    ch = os.environ.get("NEXTEVENTS_BROWSER_CHANNEL")
+    hit = _browser_probe
+    if hit is True or (isinstance(hit, float)
+                       and time.monotonic() - hit < _PROBE_RETRY_S):
+        return hit is True
+    with _probe_lock:
+        # un appel concurrent (ex. clic pendant la sonde de démarrage)
+        # attend le résultat en cours au lieu de re-sonder
+        hit = _browser_probe
+        if hit is True or (isinstance(hit, float)
+                           and time.monotonic() - hit < _PROBE_RETRY_S):
+            return hit is True
+        box = {}
+
+        def run():
+            box["ok"] = _probe_launch()
+
+        t = threading.Thread(target=run, daemon=True)
+        t.start()
+        t.join()
+        _browser_probe = True if box.get("ok") else time.monotonic()
+        return _browser_probe is True
+
+
+def _probe_launch():
     try:
         from playwright.sync_api import sync_playwright
-        kw = {"channel": ch} if ch else {}
+    except ImportError:
+        return False
+    try:
+        from .browser import launch_browser
         with sync_playwright() as p:
-            b = p.chromium.launch(**kw)
+            b = launch_browser(p)
+            if b is None:
+                return False
             b.close()
-        _browser_probe = True
     except Exception:
-        _browser_probe = False
-    return _browser_probe
+        return False
+    return True
