@@ -3,6 +3,7 @@ capture Playwright/Chromium (repli firefox --headless)."""
 
 import html
 import io
+import math
 import os
 import re
 import subprocess
@@ -121,18 +122,23 @@ def _md_inline(text):
 
 
 def truncate(text, limit=400):
-    """Coupe en fin de phrase si l'une se termine dans la seconde
-    moitié de la fenêtre, sinon au dernier mot complet + « … » —
-    jamais au milieu d'un mot ou d'une phrase."""
+    """Coupe à la dernière fin de phrase présente dans la fenêtre,
+    sinon au dernier mot complet + « … » — jamais au milieu d'un
+    mot, et pas au milieu d'une phrase si une fin de phrase existe
+    avant la borne (repli mot = première phrase plus longue que la
+    limite, cas sans alternative)."""
     if len(text) <= limit:
         return text
     w = text[:limit]
-    for sep in (". ", "! ", "? ", "… "):
-        i = w.rfind(sep, int(limit * 0.4))
-        if i > 0:
-            return w[:i].rstrip(".,;:!?") + "…"
-    cut = w.rsplit(" ", 1)[0]
-    return cut.rstrip(".,;:!?") + "…"
+    # max sur les séparateurs = la fin de phrase la plus tardive,
+    # quelle que soit la ponctuation — pas de seuil : une phrase
+    # terminée tôt dans la fenêtre vaut mieux qu'une coupe en plein
+    # milieu (surtout aux petites limites)
+    i = max(w.rfind(s) for s in (". ", "! ", "? ", "… "))
+    if i > 0:
+        return w[:i].rstrip(".,;:!?") + "…"
+    cut = w.rsplit(maxsplit=1)
+    return (cut[0] if len(cut) > 1 else w).rstrip(".,;:!?") + "…"
 
 
 def asset_svg(name):
@@ -140,21 +146,88 @@ def asset_svg(name):
     return p.read_text(encoding="utf-8") if p.exists() else ""
 
 
-def _desc_html(ev, mode, limit):
+# métriques de la colonne texte par gabarit — dérivées des :root et
+# règles de assets/slide_template*.html, mesurées au rendu (chromium) :
+# hauteur/largeur utiles de la colonne, hauteurs de ligne titre/
+# description, hauteur d'une ligne de specs (normale/compacte).
+# Elles servent à borner la description à ce qui tient réellement :
+# sinon c'est -webkit-line-clamp qui tranche, en plein mot, ou le
+# flex qui rogne une ligne en hauteur.
+_LAYOUT = {
+    "landscape": dict(col_h=892, title_w=942, h1_max=4,
+                      desc_lh=34 * 1.38, desc_mt=36, desc_max=6,
+                      desc_cpl=46, spec_row=50, spec_row_t=47,
+                      spec_gap=26, spec_gap_t=16, spec_pad=0),
+    "portrait": dict(col_h=842, title_w=1114, h1_max=5,
+                     desc_lh=32 * 1.4, desc_mt=28, desc_max=7,
+                     desc_cpl=63, spec_row=47, spec_row_t=45,
+                     spec_gap=20, spec_gap_t=15, spec_pad=64),
+    "portrait-screen": dict(col_h=922, title_w=972, h1_max=6,
+                            desc_lh=32 * 1.45, desc_mt=30, desc_max=9,
+                            desc_cpl=55, spec_row=45, spec_row_t=42,
+                            spec_gap=18, spec_gap_t=14, spec_pad=64),
+}
+# largeur moyenne d'un glyphe de titre / description, en fraction de
+# la taille de fonte — mesurée (~0,5 em) puis majorée : surestimer
+# les lignes du titre protège la description, jamais l'inverse
+_TITLE_CHAR_W = 0.55
+
+
+def _desc_lines(orientation, n_title, h1_size, n_specs):
+    """Nombre de lignes de description réellement disponibles sur la
+    diapo : hauteur de la colonne moins le titre estimé (borné par
+    son clamp) et le bloc specs. ≥ 1 — le flex CSS garde le dernier
+    mot en cas d'estimation trop optimiste."""
+    lay = _LAYOUT[orientation]
+    t_lines = min(
+        lay["h1_max"],
+        max(1, math.ceil(n_title * h1_size * _TITLE_CHAR_W
+                         / lay["title_w"])))
+    tight = n_specs >= 4
+    specs_h = (n_specs * (lay["spec_row_t"] if tight else lay["spec_row"])
+               + max(0, n_specs - 1)
+               * (lay["spec_gap_t"] if tight else lay["spec_gap"])
+               + (lay["spec_pad"] if n_specs else 0))
+    avail = (lay["col_h"] - t_lines * h1_size * 1.06
+             - lay["desc_mt"] - specs_h - 8)
+    return max(1, min(lay["desc_max"], int(avail // lay["desc_lh"])))
+
+
+def _desc_html(ev, mode, limit, orientation="landscape",
+               max_lines=None):
     """Texte de la description selon le réglage desc_mode : « chapeau »
     (texte court), « long » (description détaillée — le clamp CSS
     borne l'affichage), « auto » (markdown/long si présent, chapeau
-    sinon — comportement historique)."""
+    sinon — comportement historique). `max_lines` borne aussi au
+    nombre de lignes calculé pour la diapo (_desc_lines)."""
     if mode == "chapeau":
         src = ev.get("desc") or ""
     elif mode == "long":
-        src = (ev.get("desc_md") or ev.get("desc_long")
+        # desc_long d'abord : desc_md est le *chapeau* markdown OA,
+        # pas la description détaillée — il masquerait desc_long
+        src = (ev.get("desc_long") or ev.get("desc_md")
                or ev.get("desc") or "")
     else:
         src = ev.get("desc_md") or ev.get("desc") or ""
-    # toujours tronquer côté texte : sans borne, le clamp CSS coupe
-    # au milieu d'un mot — 400 car. ≈ ce que la zone affiche
-    return _md_inline(truncate(src, limit or 400))
+    # toujours tronquer côté texte, plafonné à la capacité du gabarit :
+    # sinon le clamp CSS prend le relais et coupe au milieu d'un mot —
+    # 400 car. ≈ ce que la zone affiche quand la limite est à 0
+    lay = _LAYOUT.get(orientation)
+    cap = limit or 400
+    if lay:
+        cpl = lay["desc_cpl"]
+        cap = min(cap, cpl * (max_lines or lay["desc_max"]))
+    txt = truncate(src, cap)
+    if lay and max_lines and "\n" in txt:
+        # un « \n » rendu en <br> consomme aussi une ligne du clamp
+        # sans que la borne en caractères le sache — resserrer tant
+        # que le texte ne rentre pas dans les lignes prévues
+        def used(t):
+            return sum(max(1, math.ceil(len(s) / cpl))
+                       for s in t.split("\n"))
+        while used(txt) > max_lines and len(txt) > 40:
+            txt = truncate(src, int(len(txt) * 0.85))
+    return _md_inline(txt)
 
 
 def slide_html(ev, idx, fonts, orientation="landscape",
@@ -180,6 +253,12 @@ def slide_html(ev, idx, fonts, orientation="landscape",
     else:
         h1_size = 80 if n_title < 50 else 64 if n_title < 80 else 52
     specs_cls = "specs specs--tight" if len(keys) >= 4 else "specs"
+
+    # lignes de description réellement disponibles : la colonne est
+    # partagée entre titre, description et specs — la borne texte
+    # (caractères) et le clamp CSS (lignes) restent alignés, sinon
+    # l'un coupe en plein mot là où l'autre a déjà posé « … »
+    d_lines = _desc_lines(orientation, n_title, h1_size, len(keys))
 
     credit = html.escape(ev.get("credit", ""))
     if ev.get("img_data"):
@@ -219,7 +298,8 @@ def slide_html(ev, idx, fonts, orientation="landscape",
         title=html.escape(ev["title"]),
         # desc_md : markdown interprété (gras/italique) ; desc plat en
         # repli (chemin site — pas de markdown de toute façon)
-        desc=_desc_html(ev, desc_mode, desc_max),
+        desc=_desc_html(ev, desc_mode, desc_max, orientation, d_lines),
+        desc_lines=d_lines,
         specs_cls=specs_cls,
         specs_html=specs_html,
         logo_mark=asset_svg("logo-mark.svg"),
@@ -235,12 +315,23 @@ def slugify(text, maxlen=40):
 def slide_name(ev, idx):
     """Nom stable dérivé de la date + titre : l'ordre alphabétique suit la
     chronologie et un événement garde son nom entre deux générations."""
-    d = ev["specs"].get("Date", "")
-    m = re.search(r"(\d{2})/(\d{2})/(\d{2})", d)
-    t = re.search(r"(\d{1,2})h(\d{2})?", d)
-    prefix = f"20{m.group(3)}-{m.group(2)}-{m.group(1)}" if m else f"zz{idx:02d}"
-    if t:
-        prefix += f"-{int(t.group(1)):02d}h{t.group(2) or '00'}"
+    dt = ev.get("_dt")
+    if dt:
+        # _dt (a, m, j, h, min) : fiable quel que soit le format
+        # d'affichage de la spec Date (date_format ≠ compact retire
+        # le motif JJ/MM/AA du libellé — le nommage ne doit pas en
+        # dépendre)
+        prefix = f"{dt[0]:04d}-{dt[1]:02d}-{dt[2]:02d}"
+        if dt[3] or dt[4]:
+            prefix += f"-{dt[3]:02d}h{dt[4]:02d}"
+    else:
+        d = ev["specs"].get("Date", "")
+        m = re.search(r"(\d{2})/(\d{2})/(\d{2})", d)
+        t = re.search(r"(\d{1,2})h(\d{2})?", d)
+        prefix = (f"20{m.group(3)}-{m.group(2)}-{m.group(1)}"
+                  if m else f"zz{idx:02d}")
+        if t:
+            prefix += f"-{int(t.group(1)):02d}h{t.group(2) or '00'}"
     if ev.get("pinned"):
         # événement multi-jours en cours : nom de fichier trié en tête
         # ('slide-00-' précède 'slide-20…' alphabétiquement)

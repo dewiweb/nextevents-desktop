@@ -31,7 +31,7 @@ DEFAULTS = {
     "next_label": "Prochaine séance : ",  # préfixe récurrent (vide = off)
     "date_format": "compact",  # compact JJ/MM/AA | noyear JJ/MM | short | long
     "desc_mode": "auto",       # auto | chapeau | long — source de la description
-    "desc_max": 400,           # troncature de la description (0 = pas de limite)
+    "desc_max": 400,           # troncature de la description (0 = borne sûre 400)
     # séries éditoriales : « identifiant = Libellé » par ligne —
     # slug de page série du site ou keyword OpenAgenda
     "series_map":

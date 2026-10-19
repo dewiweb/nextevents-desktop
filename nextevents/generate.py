@@ -240,7 +240,6 @@ def generate(out_dir=None, max_events=0, pages=99, cfg=None, size=DEFAULT_SIZE):
         events = group_sessions(
             events, (cfg or {}).get("next_label"))
     events = _limit_events(events, cfg, max_events)
-    _apply_spec_prefs(events, cfg)
     print(f"  {len(events)} événements trouvés")
     if not events:
         raise RuntimeError(
@@ -259,6 +258,12 @@ def generate(out_dir=None, max_events=0, pages=99, cfg=None, size=DEFAULT_SIZE):
                 lambda e: download_image(parse_detail(e, series_map)),
                 events))
         mark_series(events, series_map)
+
+    # après les pages de détail : Accessibilité/Public/specs de
+    # bannière n'existent pas encore au listing — appliquer ici pour
+    # que specs_show/spec_drops/spec_overrides couvrent toutes les
+    # specs, quelle que soit la source
+    _apply_spec_prefs(events, cfg)
 
     # métadonnées pour la « diapo du jour » de la webui
     import json

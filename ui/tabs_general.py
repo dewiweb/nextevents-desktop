@@ -236,8 +236,8 @@ class GeneralTabMixin:
             "Texte de la description sur la diapo : le chapeau "
             "(court), la description détaillée, ou automatique "
             "(détaillée si présente, chapeau sinon). Le nombre de "
-            "lignes est borné par le gabarit ; 0 car. = pas de "
-            "troncature.")
+            "lignes est borné par le gabarit ; 0 car. = borne sûre "
+            "par défaut (400 car.).")
         self.desc_mode.addItem("Automatique", "auto")
         self.desc_mode.addItem("Chapeau seul", "chapeau")
         self.desc_mode.addItem("Longue description", "long")
@@ -247,8 +247,9 @@ class GeneralTabMixin:
         self.desc_max.setToolTip(
             "Troncature de la description en caractères — la coupe se "
             "fait en fin de phrase, jamais au milieu d'un mot. "
-            "0 = borne sûre par défaut (400 car. ≈ ce que la zone "
-            "affiche).")
+            "Plafonnée par la capacité du gabarit (≈ 280 car. en "
+            "paysage, 440 en A4, 480 en écran portrait) ; "
+            "0 = borne sûre par défaut (400 car.).")
         drow = QHBoxLayout()
         drow.addWidget(self.desc_mode)
         drow.addWidget(self.desc_max)

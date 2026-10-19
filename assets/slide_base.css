@@ -170,6 +170,9 @@ h1 {
     -webkit-line-clamp: var(--h1-lines);
     -webkit-box-orient: vertical;
     overflow: hidden;
+    /* colonne flex : le titre n'est jamais réduit — une description
+       longue + beaucoup de specs ne doit pas le rogner */
+    flex: 0 0 auto;
 }
 
 .desc {
@@ -182,6 +185,11 @@ h1 {
     -webkit-line-clamp: var(--desc-lines);
     -webkit-box-orient: vertical;
     overflow: hidden;
+    /* …c'est elle qui absorbe le dépassement : élément le moins
+       critique de la colonne (déjà bornée par truncate), elle peut
+       perdre des lignes — min une ligne complète, pas de sliver */
+    flex: 0 1 auto;
+    min-height: calc(var(--desc-size) * var(--desc-lh));
 }
 
 
@@ -195,6 +203,9 @@ h1 {
     flex-direction: column;
     gap: var(--specs-gap);
     padding-bottom: var(--specs-pad-bottom);
+    /* non réductible : date/lieu/tarif restent visibles en entier —
+       c'est la description qui cède la place en cas de dépassement */
+    flex: 0 0 auto;
 }
 
 .specs--tight { gap: var(--specs-gap-tight); }

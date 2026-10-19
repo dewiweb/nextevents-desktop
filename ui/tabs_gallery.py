@@ -467,7 +467,10 @@ class GalleryTabMixin:
                 (dest / "html").mkdir(exist_ok=True)
                 hp = dest / "html" / f"{stem}.html"
                 hp.write_text(
-                    slide_html(ev, 0, fonts, orientation),
+                    slide_html(
+                        ev, 0, fonts, orientation,
+                        cfg.get("desc_mode") or "auto",
+                        int(cfg.get("desc_max", 400) or 0)),
                     encoding="utf-8")
                 # render_all est un générateur : il faut l'itérer
                 # pour que le rendu s'exécute

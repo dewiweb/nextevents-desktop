@@ -421,6 +421,17 @@ class DateFormatTest(unittest.TestCase):
         self.assertEqual(self._spec("15/11/26 à 14h30", "compact"),
                          "15/11/26 à 14h30")
 
+    def test_slide_name_uses_dt_not_display_format(self):
+        """date_format ≠ compact retire le motif JJ/MM/AA du libellé —
+        le nom de fichier doit rester chronologique via ev['_dt']."""
+        from nextevents.slide import slide_name
+        for fmt in ("noyear", "short", "long"):
+            ev = {"title": "Test",
+                  "specs": {"Date": self._spec("15/11/26 à 14h30", fmt)},
+                  "_dt": (2026, 11, 15, 14, 30)}
+            self.assertEqual(slide_name(ev, 3),
+                             "slide-2026-11-15-14h30-test")
+
 
 class DescModeTest(unittest.TestCase):
     """desc_mode choisit la source de la description ; desc_max borne
@@ -440,8 +451,33 @@ class DescModeTest(unittest.TestCase):
         self.assertNotIn("TEXTE LONG", self._html("chapeau"))
         self.assertIn("TEXTE LONG", self._html("long"))
 
+    def test_oa_desc_md_is_chapeau_not_long(self):
+        """Forme OpenAgenda : desc_md porte le *chapeau* markdown —
+        le mode « long » doit servir desc_long, pas desc_md."""
+        from nextevents.slide import slide_html
+        ev = {"title": "T", "tag": "X", "color": None,
+              "desc": "CHAPEAU", "desc_md": "**CHAPEAU** md",
+              "desc_long": "TEXTE LONG DÉTAILLÉ",
+              "specs": {"Date": "01/01/26"}}
+        h = slide_html(ev, 0, {"regular": "", "medium": ""},
+                       desc_mode="long")
+        self.assertIn("TEXTE LONG", h)
+        self.assertNotIn("CHAPEAU", h)
+
     def test_limit(self):
         self.assertNotIn("TEXTE LONG", self._html("long", 10))
+
+    def test_early_sentence_end_wins_over_mid_sentence(self):
+        """Petite limite : une fin de phrase avant l'ancien seuil de
+        40 % de la fenêtre doit être préférée à une coupe en plein
+        milieu d'une phrase."""
+        from nextevents.slide import truncate
+        text = "Phrase courte. " + "mot " * 60
+        self.assertEqual(truncate(text, 100), "Phrase courte…")
+        # sans fin de phrase dans la fenêtre : dernier mot complet
+        # (la fenêtre se termine au milieu d'un « mot » → repli)
+        self.assertTrue(
+            truncate("debut " + "mot " * 60, 40).endswith("mot…"))
 
 
 class AccessLabelsTest(unittest.TestCase):
