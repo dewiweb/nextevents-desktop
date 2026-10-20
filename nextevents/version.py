@@ -56,7 +56,11 @@ def pick_newer(releases, beta=None):
 
     Renvoie (tag, url) — ("", "") si rien d'admissible."""
     if beta is None:
-        beta = "-" in VERSION
+        # préversion si l'app est une beta (« - » dans le tag) OU une
+        # build non versionnée (« dev » — build local hors CI) : dans
+        # le doute elle doit voir les préreleases plutôt que rester
+        # muette à chaque vérification
+        beta = "-" in VERSION or not VERSION[:1].isdigit()
     tag = url = ""
     best = None
     for r in (releases if isinstance(releases, list) else []):
