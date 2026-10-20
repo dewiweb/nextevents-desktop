@@ -121,6 +121,12 @@ def _md_inline(text):
     return t.replace("\n", "<br>")
 
 
+# fins de phrase acceptées pour les coupures — le site joint les
+# paragraphes de desc_long par « \n » : sans les variantes \n la
+# plupart des fins de phrase réelles seraient ratées (coupe au mot)
+_SENT_END = (". ", "! ", "? ", "… ", ".\n", "!\n", "?\n", "…\n", "\n")
+
+
 def truncate(text, limit=400):
     """Coupe à la dernière fin de phrase présente dans la fenêtre,
     sinon au dernier mot complet + « … » — jamais au milieu d'un
@@ -134,9 +140,9 @@ def truncate(text, limit=400):
     # quelle que soit la ponctuation — pas de seuil : une phrase
     # terminée tôt dans la fenêtre vaut mieux qu'une coupe en plein
     # milieu (surtout aux petites limites)
-    i = max(w.rfind(s) for s in (". ", "! ", "? ", "… "))
+    i = max(w.rfind(s) for s in _SENT_END)
     if i > 0:
-        return w[:i].rstrip(".,;:!?") + "…"
+        return w[:i].rstrip(".,;:!?\n") + "…"
     cut = w.rsplit(maxsplit=1)
     return (cut[0] if len(cut) > 1 else w).rstrip(".,;:!?") + "…"
 
@@ -217,6 +223,13 @@ def _desc_html(ev, mode, limit, orientation="landscape",
     if lay:
         cpl = lay["desc_cpl"]
         cap = min(cap, cpl * (max_lines or lay["desc_max"]))
+    if mode != "chapeau" and len(src) > cap:
+        # première phrase plus longue que la borne : la troncature
+        # tomberait en plein milieu — retomber sur le chapeau, pensé
+        # pour tenir dans la zone
+        end = max(src.find(s) for s in _SENT_END)
+        if end < 0 or end + 2 > cap:
+            src = ev.get("desc") or src
     txt = truncate(src, cap)
     if lay and max_lines and "\n" in txt:
         # un « \n » rendu en <br> consomme aussi une ligne du clamp

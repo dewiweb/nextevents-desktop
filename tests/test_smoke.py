@@ -467,6 +467,23 @@ class DescModeTest(unittest.TestCase):
     def test_limit(self):
         self.assertNotIn("TEXTE LONG", self._html("long", 10))
 
+    def test_newline_sentence_endings(self):
+        # desc_long joint les paragraphes par « \n » : «.\n » compte
+        # comme fin de phrase, sinon la coupe tombe au milieu d'un mot
+        from nextevents.slide import truncate
+        text = "Première phrase.\nSeconde " + "suite " * 60
+        out = truncate(text, 60)
+        self.assertTrue(out.startswith("Première phrase"))
+        self.assertTrue(out.endswith("…"))
+        self.assertNotIn("suit", out)
+
+    def test_first_sentence_overflow_falls_back_to_chapeau(self):
+        # première phrase plus longue que la borne → repli chapeau
+        # plutôt qu'une coupe en plein milieu
+        h = self._html("long", 10)
+        self.assertIn("CHAPEAU", h)
+        self.assertNotIn("TEXTE", h)
+
     def test_early_sentence_end_wins_over_mid_sentence(self):
         """Petite limite : une fin de phrase avant l'ancien seuil de
         40 % de la fenêtre doit être préférée à une coupe en plein
